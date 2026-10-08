@@ -22,6 +22,7 @@ if (MONGO_URI) {
         .catch(err => console.error('MongoDB Error:', err));
 }
 
+// موديل GuildSettings مع القيم الافتراضية الأصلية الخاصة بك
 const GuildSettings = mongoose.models.GuildSettings || mongoose.model('GuildSettings', new mongoose.Schema({
   guildId: { type: String, required: true, unique: true },
   prefix: { type: String, default: '-' },
@@ -178,7 +179,7 @@ app.post('/api/settings/:guildId', async (req, res) => {
         const updated = await GuildSettings.findOneAndUpdate(
             { guildId: guildId },
             { $set: updateData },
-            { upsert: true, new: true }
+            { upsert: true, new: true, setDefaultsOnInsert: true }
         );
 
         return res.json({ success: true, settings: updated });

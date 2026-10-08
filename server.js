@@ -10,10 +10,10 @@ const PORT = process.env.PORT || 3000;
 
 const REDIRECT_URI = process.env.REDIRECT_URI || 'https://ticket-bot-board.vercel.app/api/auth/callback';
 const MONGO_URI = process.env.MONGO_URI;
-const BOT_TOKEN = process.env.TOKEN; // توكن البوت
+const BOT_TOKEN = process.env.TOKEN;
 
-const BOT_NAME = process.env.BOT_NAME || 'Empire Ticket Bot';
-const BOT_AVATAR = process.env.BOT_AVATAR || 'https://i.postimg.cc/8P2L5vX4/1000020307.jpg';
+const BOT_NAME = process.env.BOT_NAME || 'Light Ticket Bot';
+const BOT_AVATAR = process.env.BOT_AVATAR || 'https://cdn.discordapp.com/embed/avatars/0.png';
 
 // الاتصال بـ MongoDB
 if (MONGO_URI) {
@@ -55,14 +55,12 @@ app.use(session({
     }
 }));
 
-// دالة مساعدة لتحديث سيرفرات المستخدم المقترنة بالبوت ديناميكياً
+// دالة مساعدة لتحديث سيرفرات المستخدم المقترنة بالبوت مباشرة من ديسكورد
 async function fetchAndFilterGuilds(accessToken) {
-    // جلب سيرفرات المستخدم
     const userGuildsResponse = await axios.get('https://discord.com/api/users/@me/guilds', {
         headers: { Authorization: `Bearer ${accessToken}` }
     });
 
-    // جلب سيرفرات البوت
     let botGuildIds = new Set();
     try {
         const botGuildsResponse = await axios.get('https://discord.com/api/users/@me/guilds?limit=200', {
@@ -73,7 +71,6 @@ async function fetchAndFilterGuilds(accessToken) {
         console.error('Bot Guilds Fetch Error:', botErr.response ? botErr.response.data : botErr.message);
     }
 
-    // تصفية السيرفرات: المستخدم إداري + البوت موجود في السيرفر
     return userGuildsResponse.data.filter(g => {
         const isManager = (parseInt(g.permissions) & 0x8) === 0x8 || (parseInt(g.permissions) & 0x20) === 0x20;
         const botInGuild = botGuildIds.has(String(g.id));
@@ -131,7 +128,7 @@ app.get('/login', (req, res) => {
     res.redirect(discordAuthUrl);
 });
 
-// استقبال العودة وتصفية السيرفرات
+// استقبال العودة
 app.get('/api/auth/callback', async (req, res) => {
     const code = req.query.code;
     if (!code) return res.send('لم يتم استقبال كود التحقق من ديسكورد.');
@@ -153,11 +150,8 @@ app.get('/api/auth/callback', async (req, res) => {
             headers: { Authorization: `Bearer ${accessToken}` }
         });
 
-        const validGuilds = await fetchAndFilterGuilds(accessToken);
-
         req.session.accessToken = accessToken;
         req.session.user = userResponse.data;
-        req.session.guilds = validGuilds;
 
         res.redirect('/dashboard');
     } catch (error) {
@@ -183,13 +177,13 @@ app.get('/', (req, res) => {
             * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Cairo', sans-serif; }
             body { background: #0b0e14; color: #ffffff; min-height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; }
             .card { background: rgba(22, 27, 34, 0.85); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 20px; padding: 40px 30px; max-width: 480px; width: 90%; text-align: center; }
-            .bot-avatar { width: 100px; height: 100px; border-radius: 50%; border: 3px solid #5865F2; margin-bottom: 20px; }
+            .bot-avatar { width: 100px; height: 100px; border-radius: 50%; border: 3px solid #5865F2; margin-bottom: 20px; object-fit: cover; }
             .btn-login { display: inline-flex; align-items: center; justify-content: center; gap: 12px; width: 100%; background: #5865F2; color: #fff; padding: 14px 28px; font-size: 16px; font-weight: 700; border-radius: 12px; text-decoration: none; }
         </style>
     </head>
     <body>
         <div class="card">
-            <img src="${BOT_AVATAR}" alt="Bot Avatar" class="bot-avatar">
+            <img src="${BOT_AVATAR}" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'" alt="Bot Avatar" class="bot-avatar">
             <h1>${BOT_NAME}</h1>
             <p style="margin: 15px 0 25px; color: #949ba4;">مرحباً بك! يرجى تسجيل الدخول بحساب ديسكورد لإدارة سيرفراتك.</p>
             <a href="/login" class="btn-login"><i class="fa-brands fa-discord"></i> تسجيل الدخول بواسطة Discord</a>
@@ -200,22 +194,22 @@ app.get('/', (req, res) => {
     res.send(html);
 });
 
-// قائمة السيرفرات (يتم التحديث المباشر عند إعادة التحميل Refresh)
+// قائمة السيرفرات (تجلب السيرفرات الحية مباشرة في كل زيارة أو Refresh)
 app.get('/dashboard', async (req, res) => {
     if (!req.session.user) return res.redirect('/login');
 
-    // إعادة تحديث قائمة السيرفرات تلقائياً عند Refresh
+    let guilds = [];
     if (req.session.accessToken) {
         try {
-            req.session.guilds = await fetchAndFilterGuilds(req.session.accessToken);
+            guilds = await fetchAndFilterGuilds(req.session.accessToken);
+            req.session.guilds = guilds;
         } catch (e) {
             console.error('Refresh Guilds Error:', e.message);
+            guilds = req.session.guilds || [];
         }
     }
 
     const user = req.session.user;
-    const guilds = req.session.guilds || [];
-
     const userAvatar = user.avatar 
         ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png`
         : `https://cdn.discordapp.com/embed/avatars/0.png`;
@@ -298,12 +292,24 @@ app.get('/dashboard', async (req, res) => {
     res.send(html);
 });
 
-// صفحة الإعدادات الشاملة (تحتوي على جميع التابات)
+// صفحة الإعدادات الشاملة
 app.get('/dashboard/:guildId', async (req, res) => {
     if (!req.session.user) return res.redirect('/login');
 
     const guildId = String(req.params.guildId);
-    const guild = (req.session.guilds || []).find(g => String(g.id) === guildId);
+    
+    // إعادة التحقق المباشر من أن البوت والمستخدم موجودان في السيرفر
+    let guilds = [];
+    if (req.session.accessToken) {
+        try {
+            guilds = await fetchAndFilterGuilds(req.session.accessToken);
+            req.session.guilds = guilds;
+        } catch (e) {
+            guilds = req.session.guilds || [];
+        }
+    }
+
+    const guild = guilds.find(g => String(g.id) === guildId);
 
     if (!guild) {
         return res.send('❌ لا تملك صلاحيات لإدارة هذا السيرفر أو أن البوت غير موجود به.');
@@ -423,7 +429,7 @@ app.get('/dashboard/:guildId', async (req, res) => {
                 <!-- Tab 4: Command Permissions -->
                 <div id="permissions" class="tab-content">
                     <h2><i class="fa-solid fa-user-shield" style="color:#eb459e;"></i> الأوامر المدارة وصلاحياتها (-set)</h2>
-                    <p style="color:#949ba4; font-size:13px; margin-bottom:15px;">إدارة صلاحيات الأوامر المتاحة في البوت برتب السيرفر:</p>
+                    <p style="color:#949ba4; font-size:13px; margin-bottom:15px;">يمكنك التحكم بالصلاحيات من داخل ديسكورد عبر أمر -set مباشرة.</p>
                     <div class="cmd-list">
                         <div class="cmd-item"><span class="cmd-name">-add</span><span>إضافة عضو</span></div>
                         <div class="cmd-item"><span class="cmd-name">-come</span><span>منشن عضو</span></div>
@@ -460,7 +466,6 @@ app.get('/dashboard/:guildId', async (req, res) => {
         <script>
             const currentGuildId = "${guild.id}";
 
-            // جلب البيانات المخزنة وتعبئتها فور فتح الصفحة
             window.addEventListener('DOMContentLoaded', async () => {
                 try {
                     const res = await fetch('/api/settings/' + currentGuildId);

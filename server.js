@@ -23,7 +23,7 @@ if (MONGO_URI) {
         .catch(err => console.error('MongoDB Error:', err));
 }
 
-// موديل GuildSettings المكتمل بكل الخصائص
+// موديل GuildSettings
 const GuildSettings = mongoose.models.GuildSettings || mongoose.model('GuildSettings', new mongoose.Schema({
   guildId: { type: String, required: true, unique: true },
   staffRoleId: { type: String, default: '1555478928708337775' },
@@ -34,13 +34,11 @@ const GuildSettings = mongoose.models.GuildSettings || mongoose.model('GuildSett
   panelTitle: { type: String, default: '🎫 LIGHT Support | الدعم الفني' },
   panelDescription: { type: String, default: 'مرحباً بك في نظام الدعم الفني الخاص بسيرفر LIGHT.' },
   
-  // النقاط والمهل الزمنية
   claimPoints: { type: Number, default: 1 },
   warnPoints: { type: Number, default: 1 },
   timeoutPoints: { type: Number, default: 1 },
   renameCooldown: { type: Number, default: 10 },
 
-  // أقسام قائمة الاختيار
   selectOptions: {
     type: Array,
     default: [
@@ -50,22 +48,10 @@ const GuildSettings = mongoose.models.GuildSettings || mongoose.model('GuildSett
     ]
   },
 
-  // صلاحيات الأوامر المدارة
   commandPermissions: {
     type: Map,
     of: String,
-    default: {
-      add: '',
-      come: '',
-      rename: '',
-      claim: '',
-      timeout: '',
-      warn: '',
-      close: '',
-      delete: '',
-      addpoints: '',
-      removepoints: ''
-    }
+    default: {}
   }
 }, { timestamps: true }));
 
@@ -74,7 +60,6 @@ app.set('trust proxy', 1);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// منع تخزين الصفحات كـ Cache لضمان ظهور التحديثات لحظياً عند Refresh
 app.use((req, res, next) => {
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     res.set('Pragma', 'no-cache');
@@ -82,7 +67,6 @@ app.use((req, res, next) => {
     next();
 });
 
-// إعداد الجلسة
 app.use(session({
     secret: process.env.SESSION_SECRET || 'secret-key-empire-12345',
     resave: false,
@@ -98,7 +82,6 @@ app.use(session({
     }
 }));
 
-// دالة جديد التوكن وتحديث سيرفرات ديسكورد الحية
 async function getFreshUserGuilds(req) {
     let accessToken = req.session.accessToken;
 
@@ -142,7 +125,6 @@ async function getFreshUserGuilds(req) {
     });
 }
 
-// API لجلب الإعدادات
 app.get('/api/settings/:guildId', async (req, res) => {
     if (!req.session.user) return res.status(401).json({ error: 'غير مصرح' });
     try {
@@ -157,7 +139,6 @@ app.get('/api/settings/:guildId', async (req, res) => {
     }
 });
 
-// API لحفظ الإعدادات
 app.post('/api/settings/:guildId', async (req, res) => {
     if (!req.session.user) return res.status(401).json({ error: 'غير مصرح' });
 
@@ -178,13 +159,11 @@ app.post('/api/settings/:guildId', async (req, res) => {
     }
 });
 
-// تسجيل الدخول
 app.get('/login', (req, res) => {
     const discordAuthUrl = `https://discord.com/api/oauth2/authorize?client_id=${process.env.CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=identify%20guilds`;
     res.redirect(discordAuthUrl);
 });
 
-// العودة من الدخول
 app.get('/api/auth/callback', async (req, res) => {
     const code = req.query.code;
     if (!code) return res.send('لم يتم استقبال كود التحقق من ديسكورد.');
@@ -218,7 +197,7 @@ app.get('/api/auth/callback', async (req, res) => {
     }
 });
 
-// الرئيسية
+// الصفحة الرئيسية مع إعدادات المعاينة الفخمة
 app.get('/', (req, res) => {
     const html = `
     <!DOCTYPE html>
@@ -227,6 +206,14 @@ app.get('/', (req, res) => {
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>${BOT_NAME} - لوحة التحكم الاحترافية</title>
+
+        <!-- Open Graph Meta Tags -->
+        <meta property="og:title" content="${BOT_NAME} - لوحة التحكم الرسمية">
+        <meta property="og:description" content="قم بإدارة وتخصيص كافة إعدادات البوت، الأقسام، والصلاحيات بسهولة عبر لوحة التحكم الرسمية.">
+        <meta property="og:image" content="${BOT_AVATAR}">
+        <meta property="og:type" content="website">
+        <meta name="theme-color" content="#5865F2">
+
         <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
         <style>
@@ -371,6 +358,13 @@ app.get('/dashboard', async (req, res) => {
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>لوحة التحكم | ${BOT_NAME}</title>
+
+        <!-- Open Graph Meta Tags -->
+        <meta property="og:title" content="${BOT_NAME} - قائمة السيرفرات">
+        <meta property="og:description" content="قم بضبط وتعديل خيارات وإعدادات البوت بالسيرفر الخاص بك.">
+        <meta property="og:image" content="${BOT_AVATAR}">
+        <meta name="theme-color" content="#5865F2">
+
         <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
         <style>
@@ -425,7 +419,7 @@ app.get('/dashboard', async (req, res) => {
     res.send(html);
 });
 
-// صفحة الإعدادات الشاملة المحدثة بالكامل
+// صفحة الإعدادات الشاملة
 app.get('/dashboard/:guildId', async (req, res) => {
     if (!req.session.user) return res.redirect('/login');
 
@@ -452,6 +446,12 @@ app.get('/dashboard/:guildId', async (req, res) => {
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>إعدادات ${guild.name} | ${BOT_NAME}</title>
+
+        <meta property="og:title" content="${BOT_NAME} - إعدادات السيرفر">
+        <meta property="og:description" content="إدارة إعدادات وتخصيصات ${guild.name}.">
+        <meta property="og:image" content="${BOT_AVATAR}">
+        <meta name="theme-color" content="#5865F2">
+
         <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
         <style>

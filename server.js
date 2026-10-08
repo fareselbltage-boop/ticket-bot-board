@@ -173,6 +173,7 @@ app.get('/api/settings/:guildId', async (req, res) => {
     }
 });
 
+// تعديل دالة الحفظ لضمان تحديث وحفظ كافة الحقول بشكل دقيق ومباشر في قاعدة البيانات
 app.post('/api/settings/:guildId', async (req, res) => {
     if (!req.session.user) return res.status(401).json({ error: 'غير مصرح' });
 

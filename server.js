@@ -55,6 +55,32 @@ app.use(session({
     }
 }));
 
+// دالة مساعدة لتحديث سيرفرات المستخدم المقترنة بالبوت ديناميكياً
+async function fetchAndFilterGuilds(accessToken) {
+    // جلب سيرفرات المستخدم
+    const userGuildsResponse = await axios.get('https://discord.com/api/users/@me/guilds', {
+        headers: { Authorization: `Bearer ${accessToken}` }
+    });
+
+    // جلب سيرفرات البوت
+    let botGuildIds = new Set();
+    try {
+        const botGuildsResponse = await axios.get('https://discord.com/api/users/@me/guilds?limit=200', {
+            headers: { Authorization: `Bot ${BOT_TOKEN}` }
+        });
+        botGuildIds = new Set(botGuildsResponse.data.map(g => String(g.id)));
+    } catch (botErr) {
+        console.error('Bot Guilds Fetch Error:', botErr.response ? botErr.response.data : botErr.message);
+    }
+
+    // تصفية السيرفرات: المستخدم إداري + البوت موجود في السيرفر
+    return userGuildsResponse.data.filter(g => {
+        const isManager = (parseInt(g.permissions) & 0x8) === 0x8 || (parseInt(g.permissions) & 0x20) === 0x20;
+        const botInGuild = botGuildIds.has(String(g.id));
+        return isManager && botInGuild;
+    });
+}
+
 // API لجلب الإعدادات
 app.get('/api/settings/:guildId', async (req, res) => {
     if (!req.session.user) return res.status(401).json({ error: 'غير مصرح' });
@@ -105,7 +131,7 @@ app.get('/login', (req, res) => {
     res.redirect(discordAuthUrl);
 });
 
-// استقبال العودة وتصفية السيرفرات التي يتواجد بها البوت فقط
+// استقبال العودة وتصفية السيرفرات
 app.get('/api/auth/callback', async (req, res) => {
     const code = req.query.code;
     if (!code) return res.send('لم يتم استقبال كود التحقق من ديسكورد.');
@@ -123,34 +149,13 @@ app.get('/api/auth/callback', async (req, res) => {
 
         const accessToken = tokenResponse.data.access_token;
 
-        // جلب بيانات المستخدم
         const userResponse = await axios.get('https://discord.com/api/users/@me', {
             headers: { Authorization: `Bearer ${accessToken}` }
         });
 
-        // جلب سيرفرات المستخدم
-        const userGuildsResponse = await axios.get('https://discord.com/api/users/@me/guilds', {
-            headers: { Authorization: `Bearer ${accessToken}` }
-        });
+        const validGuilds = await fetchAndFilterGuilds(accessToken);
 
-        // جلب سيرفرات البوت
-        let botGuildIds = new Set();
-        try {
-            const botGuildsResponse = await axios.get('https://discord.com/api/users/@me/guilds?limit=200', {
-                headers: { Authorization: `Bot ${BOT_TOKEN}` }
-            });
-            botGuildIds = new Set(botGuildsResponse.data.map(g => String(g.id)));
-        } catch (botErr) {
-            console.error('Bot Guilds Fetch Error:', botErr.response ? botErr.response.data : botErr.message);
-        }
-
-        // تصفية السيرفرات: المستخدم إداري + البوت موجود في السيرفر
-        const validGuilds = userGuildsResponse.data.filter(g => {
-            const isManager = (parseInt(g.permissions) & 0x8) === 0x8 || (parseInt(g.permissions) & 0x20) === 0x20;
-            const botInGuild = botGuildIds.has(String(g.id));
-            return isManager && botInGuild;
-        });
-
+        req.session.accessToken = accessToken;
         req.session.user = userResponse.data;
         req.session.guilds = validGuilds;
 
@@ -195,9 +200,18 @@ app.get('/', (req, res) => {
     res.send(html);
 });
 
-// قائمة السيرفرات
-app.get('/dashboard', (req, res) => {
+// قائمة السيرفرات (يتم التحديث المباشر عند إعادة التحميل Refresh)
+app.get('/dashboard', async (req, res) => {
     if (!req.session.user) return res.redirect('/login');
+
+    // إعادة تحديث قائمة السيرفرات تلقائياً عند Refresh
+    if (req.session.accessToken) {
+        try {
+            req.session.guilds = await fetchAndFilterGuilds(req.session.accessToken);
+        } catch (e) {
+            console.error('Refresh Guilds Error:', e.message);
+        }
+    }
 
     const user = req.session.user;
     const guilds = req.session.guilds || [];
@@ -284,7 +298,7 @@ app.get('/dashboard', (req, res) => {
     res.send(html);
 });
 
-// صفحة الإعدادات الشاملة
+// صفحة الإعدادات الشاملة (تحتوي على جميع التابات)
 app.get('/dashboard/:guildId', async (req, res) => {
     if (!req.session.user) return res.redirect('/login');
 
@@ -325,6 +339,9 @@ app.get('/dashboard/:guildId', async (req, res) => {
             input:focus, textarea:focus { border-color: #5865f2; }
             .btn-save { background: #5865f2; color: #fff; border: none; padding: 12px 28px; border-radius: 8px; font-weight: 700; cursor: pointer; transition: 0.3s; margin-top: 10px; }
             .btn-save:hover { background: #4752c4; }
+            .cmd-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+            .cmd-item { background: #0b0e14; padding: 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center; }
+            .cmd-name { font-weight: 700; color: #5865f2; }
         </style>
     </head>
     <body>
@@ -337,6 +354,9 @@ app.get('/dashboard/:guildId', async (req, res) => {
             <div class="sidebar">
                 <button class="tab-btn active" onclick="openTab(event, 'channels')"><i class="fa-solid fa-hashtag"></i> الرومات والرتب</button>
                 <button class="tab-btn" onclick="openTab(event, 'design')"><i class="fa-solid fa-palette"></i> التصاميم والصور</button>
+                <button class="tab-btn" onclick="openTab(event, 'categories')"><i class="fa-solid fa-list-check"></i> أقسام القائمة</button>
+                <button class="tab-btn" onclick="openTab(event, 'permissions')"><i class="fa-solid fa-user-shield"></i> صلاحيات الأوامر</button>
+                <button class="tab-btn" onclick="openTab(event, 'points')"><i class="fa-solid fa-trophy"></i> إعدادات النقاط</button>
             </div>
 
             <div class="content-panel">
@@ -381,6 +401,59 @@ app.get('/dashboard/:guildId', async (req, res) => {
                     </div>
                     <button type="button" class="btn-save" onclick="saveSettings('${guild.id}')"><i class="fa-solid fa-floppy-disk"></i> حفظ التصميم</button>
                 </div>
+
+                <!-- Tab 3: Select Menu Categories -->
+                <div id="categories" class="tab-content">
+                    <h2><i class="fa-solid fa-list-check" style="color:#23a55a;"></i> تخصيص خيارات قائمة فتح التكتات</h2>
+                    <div class="form-group">
+                        <label>الخيار الأول (استفسار):</label>
+                        <input type="text" value="❓ | استفسار">
+                    </div>
+                    <div class="form-group">
+                        <label>الخيار الثاني (شكوى):</label>
+                        <input type="text" value="⚠️ | شكوى">
+                    </div>
+                    <div class="form-group">
+                        <label>الخيار الثالث (مشكلة تقنية):</label>
+                        <input type="text" value="🛠 | مشكلة تقنية">
+                    </div>
+                    <button type="button" class="btn-save" onclick="saveSettings('${guild.id}')"><i class="fa-solid fa-floppy-disk"></i> حفظ الأقسام</button>
+                </div>
+
+                <!-- Tab 4: Command Permissions -->
+                <div id="permissions" class="tab-content">
+                    <h2><i class="fa-solid fa-user-shield" style="color:#eb459e;"></i> الأوامر المدارة وصلاحياتها (-set)</h2>
+                    <p style="color:#949ba4; font-size:13px; margin-bottom:15px;">إدارة صلاحيات الأوامر المتاحة في البوت برتب السيرفر:</p>
+                    <div class="cmd-list">
+                        <div class="cmd-item"><span class="cmd-name">-add</span><span>إضافة عضو</span></div>
+                        <div class="cmd-item"><span class="cmd-name">-come</span><span>منشن عضو</span></div>
+                        <div class="cmd-item"><span class="cmd-name">-rename</span><span>تغيير الاسم</span></div>
+                        <div class="cmd-item"><span class="cmd-name">-استلام</span><span>توثيق ونقاط</span></div>
+                        <div class="cmd-item"><span class="cmd-name">-تايم</span><span>تايم أوت</span></div>
+                        <div class="cmd-item"><span class="cmd-name">-تحذير</span><span>تحذير للعضو</span></div>
+                        <div class="cmd-item"><span class="cmd-name">-اغلاق</span><span>إغلاق التكت</span></div>
+                        <div class="cmd-item"><span class="cmd-name">-حذف</span><span>حذف التكت</span></div>
+                        <div class="cmd-item"><span class="cmd-name">-addpoints</span><span>إضافة نقاط</span></div>
+                        <div class="cmd-item"><span class="cmd-name">-removepoints</span><span>خصم نقاط</span></div>
+                    </div>
+                </div>
+
+                <!-- Tab 5: Points & Settings -->
+                <div id="points" class="tab-content">
+                    <h2><i class="fa-solid fa-trophy" style="color:#f1c40f;"></i> إعدادات النقاط والمهل الزمنية</h2>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>عدد النقاط الممنوحة عند الاستلام/التحذير/التايم:</label>
+                            <input type="number" value="1">
+                        </div>
+                        <div class="form-group">
+                            <label>مهلة تغيير اسم التكت (-rename Cooldown بالدقائق):</label>
+                            <input type="number" value="10">
+                        </div>
+                    </div>
+                    <button type="button" class="btn-save" onclick="saveSettings('${guild.id}')"><i class="fa-solid fa-floppy-disk"></i> حفظ إعدادات النقاط</button>
+                </div>
+
             </div>
         </div>
 

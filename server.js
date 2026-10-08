@@ -6,6 +6,9 @@ const axios = require('axios');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// تحديد الرابط التلقائي في حال لم يقرأ Vercel المتغير
+const REDIRECT_URI = process.env.REDIRECT_URI || 'https://ticket-bot-board.vercel.app/api/auth/callback';
+
 app.use(session({
     secret: process.env.SESSION_SECRET || 'secret-key',
     resave: false,
@@ -16,7 +19,7 @@ app.use(express.json());
 
 // رابط تسجيل الدخول عبر ديسكورد
 app.get('/login', (req, res) => {
-    const discordAuthUrl = `https://discord.com/api/oauth2/authorize?client_id=${process.env.CLIENT_ID}&redirect_uri=${encodeURIComponent(process.env.REDIRECT_URI)}&response_type=code&scope=identify%20guilds`;
+    const discordAuthUrl = `https://discord.com/api/oauth2/authorize?client_id=${process.env.CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=identify%20guilds`;
     res.redirect(discordAuthUrl);
 });
 
@@ -31,7 +34,7 @@ app.get('/api/auth/callback', async (req, res) => {
             client_secret: process.env.CLIENT_SECRET,
             grant_type: 'authorization_code',
             code: code,
-            redirect_uri: process.env.REDIRECT_URI,
+            redirect_uri: REDIRECT_URI,
         }), {
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
         });
@@ -83,6 +86,11 @@ app.get('/', (req, res) => {
     res.send('<div style="font-family: Arial, sans-serif; text-align: center; margin-top: 50px;"><h1>لوحة تحكم بوت التكتات 🚀</h1><a href="/login"><button style="padding:12px 24px; font-size:16px; cursor:pointer;">تسجيل الدخول بالديسكورد</button></a></div>');
 });
 
-app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
-});
+// تصدير التطبيق من أجل Vercel
+module.exports = app;
+
+if (process.env.NODE_ENV !== 'production') {
+    app.listen(PORT, () => {
+        console.log(`Server is running on port ${PORT}`);
+    });
+}

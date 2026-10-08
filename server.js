@@ -173,7 +173,6 @@ app.get('/api/settings/:guildId', async (req, res) => {
     }
 });
 
-// تعديل دالة الحفظ لضمان تحديث وحفظ كافة الحقول بشكل دقيق ومباشر في قاعدة البيانات
 app.post('/api/settings/:guildId', async (req, res) => {
     if (!req.session.user) return res.status(401).json({ error: 'غير مصرح' });
 
@@ -377,13 +376,23 @@ app.get('/dashboard/:guildId', async (req, res) => {
             .form-group { margin-bottom: 20px; }
             label { display: block; margin-bottom: 8px; font-weight: 600; color: #b5bac1; font-size: 14px; }
             input, select, textarea { width: 100%; padding: 12px; background: rgba(11, 14, 20, 0.7); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #fff; }
-            select[multiple] { height: 110px; }
             select option { background: #161b22; padding: 4px; }
             .btn-save { background: #5865f2; color: #fff; border: none; padding: 12px 28px; border-radius: 8px; font-weight: 700; cursor: pointer; margin-top: 10px; }
             .cmd-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 15px; }
             .cmd-card { background: rgba(11, 14, 20, 0.7); padding: 15px; border-radius: 10px; }
             .cmd-card label { color: #5865f2; font-weight: 700; font-size: 15px; display: block; margin-bottom: 5px; }
             .hint { font-size: 11px; color: #949ba4; margin-top: 4px; }
+
+            /* تصميم القائمة المنسدلة الاحترافية المتعددة الرتب */
+            .custom-dropdown { position: relative; width: 100%; user-select: none; }
+            .dropdown-select-box { background: rgba(11, 14, 20, 0.7); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 12px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; color: #fff; min-height: 48px; }
+            .dropdown-options-container { position: absolute; top: 100%; left: 0; right: 0; background: #161b22; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; margin-top: 5px; max-height: 200px; overflow-y: auto; z-index: 99; display: none; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+            .dropdown-options-container.open { display: block; }
+            .dropdown-option { padding: 10px 14px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: 0.2s; color: #b5bac1; font-size: 14px; border-bottom: 1px solid rgba(255,255,255,0.03); }
+            .dropdown-option:hover { background: rgba(88, 101, 242, 0.2); color: #fff; }
+            .dropdown-option input[type="checkbox"] { accent-color: #5865f2; width: 16px; height: 16px; cursor: pointer; }
+            .selected-tags { display: flex; flex-wrap: wrap; gap: 5px; }
+            .selected-tag { background: rgba(88, 101, 242, 0.25); color: #5865f2; padding: 3px 8px; border-radius: 6px; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; gap: 5px; border: 1px solid rgba(88, 101, 242, 0.4); }
         </style>
     </head>
     <body>
@@ -471,22 +480,30 @@ app.get('/dashboard/:guildId', async (req, res) => {
                     </div>
                     <button type="button" class="btn-save" onclick="saveAliases()">حفظ الأوامر</button>
                 </div>
+                
+                <!-- قسم صلاحيات الأوامر بالشكل الاحترافي المطلوب -->
                 <div id="permissions" class="tab-content">
-                    <h2>صلاحيات الأوامر بالرتب (اضغط Ctrl للاختيار المتعدد)</h2>
+                    <h2>صلاحيات الأوامر المخصصة حسب الرتب</h2>
                     <div class="cmd-grid">
-                        <div class="cmd-card"><label>add</label><select id="perm_add" class="multi-role-select" multiple></select><div class="hint">اتركه فارغاً للجميع</div></div>
-                        <div class="cmd-card"><label>come</label><select id="perm_come" class="multi-role-select" multiple></select><div class="hint">اتركه فارغاً للجميع</div></div>
-                        <div class="cmd-card"><label>rename</label><select id="perm_rename" class="multi-role-select" multiple></select><div class="hint">اتركه فارغاً للجميع</div></div>
-                        <div class="cmd-card"><label>claim</label><select id="perm_claim" class="multi-role-select" multiple></select><div class="hint">اتركه فارغاً للجميع</div></div>
-                        <div class="cmd-card"><label>timeout</label><select id="perm_timeout" class="multi-role-select" multiple></select><div class="hint">اتركه فارغاً للجميع</div></div>
-                        <div class="cmd-card"><label>warn</label><select id="perm_warn" class="multi-role-select" multiple></select><div class="hint">اتركه فارغاً للجميع</div></div>
-                        <div class="cmd-card"><label>close</label><select id="perm_close" class="multi-role-select" multiple></select><div class="hint">اتركه فارغاً للجميع</div></div>
-                        <div class="cmd-card"><label>delete</label><select id="perm_delete" class="multi-role-select" multiple></select><div class="hint">اتركه فارغاً للجميع</div></div>
-                        <div class="cmd-card"><label>addpoints</label><select id="perm_addpoints" class="multi-role-select" multiple></select><div class="hint">اتركه فارغاً للجميع</div></div>
-                        <div class="cmd-card"><label>removepoints</label><select id="perm_removepoints" class="multi-role-select" multiple></select><div class="hint">اتركه فارغاً للجميع</div></div>
+                        ${['add', 'come', 'rename', 'claim', 'timeout', 'warn', 'close', 'delete', 'addpoints', 'removepoints'].map(cmd => `
+                            <div class="cmd-card">
+                                <label>/${cmd}</label>
+                                <div class="custom-dropdown" id="dropdown_${cmd}">
+                                    <div class="dropdown-select-box" onclick="toggleDropdown('${cmd}')">
+                                        <span class="selected-tags" id="tags_${cmd}">اختر الرتب...</span>
+                                        <i class="fa-solid fa-chevron-down" style="color: #949ba4; font-size: 12px;"></i>
+                                    </div>
+                                    <div class="dropdown-options-container" id="options_${cmd}">
+                                        <!-- سيتم تعبئة الرتب ديناميكياً هنا -->
+                                    </div>
+                                </div>
+                                <div class="hint">اتركه فارغاً للجميع</div>
+                            </div>
+                        `).join('')}
                     </div>
                     <button type="button" class="btn-save" onclick="savePermissions()">حفظ الصلاحيات</button>
                 </div>
+
                 <div id="points" class="tab-content">
                     <h2>النقاط والمهل</h2>
                     <div class="form-grid">
@@ -502,6 +519,7 @@ app.get('/dashboard/:guildId', async (req, res) => {
         <script>
             const currentGuildId = "${guild.id}";
             let serverRoles = [];
+            const commandsList = ['add', 'come', 'rename', 'claim', 'timeout', 'warn', 'close', 'delete', 'addpoints', 'removepoints'];
 
             async function loadRoles() {
                 try {
@@ -517,17 +535,58 @@ app.get('/dashboard/:guildId', async (req, res) => {
                         staffSelect.appendChild(opt);
                     });
 
-                    const multiSelects = document.querySelectorAll('.multi-role-select');
-                    multiSelects.forEach(select => {
-                        select.innerHTML = '';
+                    // تعبئة القوائم المنسدلة الاحترافية لكل أمر
+                    commandsList.forEach(cmd => {
+                        const container = document.getElementById('options_' + cmd);
+                        if (!container) return;
+                        container.innerHTML = '';
                         serverRoles.forEach(role => {
-                            const opt = document.createElement('option');
-                            opt.value = role.id;
-                            opt.textContent = '🛡️ ' + role.name;
-                            select.appendChild(opt);
+                            const div = document.createElement('div');
+                            div.className = 'dropdown-option';
+                            div.innerHTML = \`<input type="checkbox" value="\${role.id}" onchange="updateTags('\${cmd}')"> 🛡️ \${role.name}\`;
+                            div.onclick = (e) => {
+                                if (e.target.tagName !== 'INPUT') {
+                                    const cb = div.querySelector('input');
+                                    cb.checked = !cb.checked;
+                                    updateTags(cmd);
+                                }
+                            };
+                            container.appendChild(div);
                         });
                     });
                 } catch (err) { console.error('Error loading roles:', err); }
+            }
+
+            function toggleDropdown(cmd) {
+                document.querySelectorAll('.dropdown-options-container').forEach(el => {
+                    if (el.id !== 'options_' + cmd) el.classList.remove('open');
+                });
+                const container = document.getElementById('options_' + cmd);
+                container.classList.toggle('open');
+            }
+
+            window.addEventListener('click', (e) => {
+                if (!e.target.closest('.custom-dropdown')) {
+                    document.querySelectorAll('.dropdown-options-container').forEach(el => el.classList.remove('open'));
+                }
+            });
+
+            function updateTags(cmd) {
+                const container = document.getElementById('options_' + cmd);
+                const tagsContainer = document.getElementById('tags_' + cmd);
+                const checkedBoxes = container.querySelectorAll('input[type="checkbox"]:checked');
+
+                if (checkedBoxes.length === 0) {
+                    tagsContainer.innerHTML = '<span style="color:#949ba4;">اختر الرتب...</span>';
+                    return;
+                }
+
+                let html = '';
+                checkedBoxes.forEach(cb => {
+                    const roleName = cb.parentElement.textContent.trim();
+                    html += \`<span class="selected-tag">\${roleName}</span>\`;
+                });
+                tagsContainer.innerHTML = html;
             }
 
             window.addEventListener('DOMContentLoaded', async () => {
@@ -569,13 +628,18 @@ app.get('/dashboard/:guildId', async (req, res) => {
                             });
                         }
                         if (data.commandPermissions) {
-                            ['add', 'come', 'rename', 'claim', 'timeout', 'warn', 'close', 'delete', 'addpoints', 'removepoints'].forEach(cmd => {
-                                const el = document.getElementById('perm_' + cmd);
+                            commandsList.forEach(cmd => {
                                 const allowedRoles = data.commandPermissions[cmd];
-                                if (el && Array.isArray(allowedRoles)) {
-                                    Array.from(el.options).forEach(opt => {
-                                        if (allowedRoles.includes(opt.value)) opt.selected = true;
-                                    });
+                                if (Array.isArray(allowedRoles)) {
+                                    const container = document.getElementById('options_' + cmd);
+                                    if (container) {
+                                        container.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+                                            if (allowedRoles.includes(cb.value)) {
+                                                cb.checked = true;
+                                            }
+                                        });
+                                        updateTags(cmd);
+                                    }
                                 }
                             });
                         }
@@ -636,7 +700,7 @@ app.get('/dashboard/:guildId', async (req, res) => {
             }
             function saveAliases() {
                 const commandAliases = {};
-                ['add', 'come', 'rename', 'claim', 'timeout', 'warn', 'close', 'delete', 'addpoints', 'removepoints'].forEach(cmd => {
+                commandsList.forEach(cmd => {
                     commandAliases[cmd] = document.getElementById('alias_' + cmd).value.trim() || cmd;
                 });
                 const prefix = document.getElementById('prefix').value.trim() || '-';
@@ -644,12 +708,12 @@ app.get('/dashboard/:guildId', async (req, res) => {
             }
             function savePermissions() {
                 const commandPermissions = {};
-                ['add', 'come', 'rename', 'claim', 'timeout', 'warn', 'close', 'delete', 'addpoints', 'removepoints'].forEach(cmd => {
-                    const select = document.getElementById('perm_' + cmd);
-                    const selectedRoles = Array.from(select.selectedOptions).map(opt => opt.value);
-                    commandPermissions[cmd] = selectedRoles;
+                commandsList.forEach(cmd => {
+                    const container = document.getElementById('options_' + cmd);
+                    const selected = Array.from(container.querySelectorAll('input[type="checkbox"]:checked')).map(cb => cb.value);
+                    commandPermissions[cmd] = selected;
                 });
-                postPayload({ commandPermissions }, '✅ تم حفظ الصلاحيات لعدة رتب بنجاح!');
+                postPayload({ commandPermissions }, '✅ تم حفظ صلاحيات الأوامر بنجاح!');
             }
             function savePoints() {
                 postPayload({

@@ -241,10 +241,11 @@ app.get('/', (req, res) => {
         <title>${BOT_NAME} - لوحة التحكم الاحترافية</title>
         
         <!-- Open Graph / Discord Embed Meta Tags -->
+        <meta property="og:site_name" content="${BOT_NAME}">
         <meta property="og:type" content="website">
-        <meta property="og:title" content="${BOT_NAME} - لوحة التحكم الاحترافية">
+        <meta property="og:title" content="${BOT_NAME} - لوحة التحكم للإدارة">
         <meta property="og:description" content="مرحباً بك! قم بإدارة سيرفرك ونظام التذاكر باحترافية وسهولة عبر لوحة التحكم الخاصة بنا.">
-        <meta property="og:image" content="${BOT_AVATAR}">
+        <meta property="og:image" content="https://i.postimg.cc/tJW3r0PJ/Screenshot-20261001-232609-ibis-Paint-X.jpg">
         <meta property="og:url" content="https://ticket-bot-board.vercel.app">
         <meta name="theme-color" content="#5865F2">
 

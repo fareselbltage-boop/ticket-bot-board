@@ -239,6 +239,15 @@ app.get('/', (req, res) => {
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>${BOT_NAME} - لوحة التحكم الاحترافية</title>
+        
+        <!-- Open Graph / Discord Embed Meta Tags -->
+        <meta property="og:type" content="website">
+        <meta property="og:title" content="${BOT_NAME} - لوحة التحكم الاحترافية">
+        <meta property="og:description" content="مرحباً بك! قم بإدارة سيرفرك ونظام التذاكر باحترافية وسهولة عبر لوحة التحكم الخاصة بنا.">
+        <meta property="og:image" content="${BOT_AVATAR}">
+        <meta property="og:url" content="https://ticket-bot-board.vercel.app">
+        <meta name="theme-color" content="#5865F2">
+
         <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
         <style>

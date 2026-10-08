@@ -22,7 +22,7 @@ if (MONGO_URI) {
         .catch(err => console.error('MongoDB Error:', err));
 }
 
-// موديل GuildSettings مضافاً إليه رابط البانر
+// موديل GuildSettings مضافاً إليه البانر وكل الإعدادات
 const GuildSettings = mongoose.models.GuildSettings || mongoose.model('GuildSettings', new mongoose.Schema({
   guildId: { type: String, required: true, unique: true },
   prefix: { type: String, default: '-' },
@@ -79,7 +79,7 @@ app.set('trust proxy', 1);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// منع التخزين المؤقت نهائياً (No-Cache Headers)
+// منع التخزين المؤقت نهائياً لضمان تحديث الحقول والصفحات فور عمل Refresh
 app.use((req, res, next) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
     res.setHeader('Pragma', 'no-cache');
@@ -254,27 +254,27 @@ app.get('/', (req, res) => {
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>${BOT_NAME} - لوحة التحكم الاحترافية</title>
-        <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+        <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
         <style>
             * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Cairo', sans-serif; }
-            body { color: #ffffff; min-height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; position: relative; overflow: hidden; background-color: #0b0e14; }
-            body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: url('${SITE_BG}') no-repeat center center/cover; z-index: -1; filter: brightness(0.4) blur(2px); }
-            .card { background: rgba(15, 18, 25, 0.75); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 24px; padding: 45px 35px; max-width: 480px; width: 90%; text-align: center; box-shadow: 0 25px 50px rgba(0,0,0,0.7); }
-            .bot-avatar { width: 110px; height: 110px; border-radius: 50%; border: 3px solid #5865F2; margin-bottom: 20px; object-fit: cover; }
-            h1 { font-size: 28px; font-weight: 800; margin-bottom: 10px; color: #fff; }
-            p { margin: 15px 0 30px; color: #b9bbbe; font-size: 15px; line-height: 1.6; }
-            .btn-login { display: inline-flex; align-items: center; justify-content: center; gap: 12px; width: 100%; background: #5865F2; color: #fff; padding: 14px 28px; font-size: 16px; font-weight: 700; border-radius: 12px; text-decoration: none; transition: 0.3s; }
-            .btn-login:hover { background: #4752C4; }
+            body { color: #ffffff; min-height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; position: relative; overflow: hidden; background-color: #07090e; }
+            body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: url('${SITE_BG}') no-repeat center center/cover; z-index: -1; filter: brightness(0.3) blur(4px); transform: scale(1.05); }
+            .card { background: rgba(12, 16, 24, 0.78); backdrop-filter: blur(24px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 30px; padding: 50px 40px; max-width: 480px; width: 90%; text-align: center; box-shadow: 0 30px 60px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.1); }
+            .bot-avatar { width: 120px; height: 120px; border-radius: 50%; border: 4px solid #5865F2; margin-bottom: 25px; object-fit: cover; box-shadow: 0 0 25px rgba(88,101,242,0.5); }
+            h1 { font-size: 30px; font-weight: 900; margin-bottom: 12px; color: #fff; letter-spacing: 0.5px; }
+            p { margin: 15px 0 35px; color: #b5bac1; font-size: 15px; line-height: 1.7; }
+            .btn-login { display: inline-flex; align-items: center; justify-content: center; gap: 12px; width: 100%; background: linear-gradient(135deg, #5865F2, #4752C4); color: #fff; padding: 16px 28px; font-size: 16px; font-weight: 800; border-radius: 14px; text-decoration: none; transition: all 0.3s ease; box-shadow: 0 10px 25px rgba(88,101,242,0.4); }
+            .btn-login:hover { transform: translateY(-2px); box-shadow: 0 15px 30px rgba(88,101,242,0.6); }
         </style>
     </head>
     <body>
         <div class="card">
             <img src="${BOT_AVATAR}" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'" alt="Bot Avatar" class="bot-avatar">
             <h1>${BOT_NAME}</h1>
-            <p>مرحباً بك! يرجى تسجيل الدخول بحساب ديسكورد لإدارة واستعراض سيرفراتك.</p>
+            <p>مرحباً بك في نظام الإدارة الفائق! يرجى تسجيل الدخول بحساب ديسكورد للتحكم الكامل بسيرفراتك وإعدادات البوت.</p>
             <a href="${req.session.user ? '/dashboard' : '/login'}" class="btn-login">
-                <i class="fa-brands fa-discord"></i> ${req.session.user ? 'الانتقال للوحة التحكم' : 'تسجيل الدخول بواسطة Discord'}
+                <i class="fa-brands fa-discord fa-lg"></i> ${req.session.user ? 'الانتقال للوحة التحكم' : 'تسجيل الدخول بواسطة Discord'}
             </a>
         </div>
     </body>
@@ -298,7 +298,7 @@ app.get('/dashboard', async (req, res) => {
 
     let guildsCardsHtml = '';
     if (guilds.length === 0) {
-        guildsCardsHtml = `<div style="grid-column: 1 / -1; text-align: center; padding: 40px; background: rgba(24, 30, 41, 0.85); border-radius: 16px;"><h3>لا توجد سيرفرات متاحة</h3></div>`;
+        guildsCardsHtml = `<div style="grid-column: 1 / -1; text-align: center; padding: 50px; background: rgba(18, 22, 31, 0.85); border-radius: 20px; border: 1px solid rgba(255,255,255,0.06);"><h3 style="color: #949ba4;">لا توجد سيرفرات متاحة أو لا تمتلك صلاحيات الإدارة فيها</h3></div>`;
     } else {
         guilds.forEach(guild => {
             const guildIcon = guild.icon ? `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png` : `https://cdn.discordapp.com/embed/avatars/1.png`;
@@ -309,7 +309,7 @@ app.get('/dashboard', async (req, res) => {
                         <div class="guild-name">${guild.name}</div>
                         <div class="guild-id">ID: ${guild.id}</div>
                     </div>
-                    <a href="/dashboard/${guild.id}" class="btn-manage"><i class="fa-solid fa-gear"></i> إعدادات البوت</a>
+                    <a href="/dashboard/${guild.id}" class="btn-manage"><i class="fa-solid fa-sliders"></i> إدارة الإعدادات</a>
                 </div>
             `;
         });
@@ -322,23 +322,27 @@ app.get('/dashboard', async (req, res) => {
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>لوحة التحكم | ${BOT_NAME}</title>
-        <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+        <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
         <style>
             * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Cairo', sans-serif; }
-            body { color: #ffffff; min-height: 100vh; background-color: #0f1219; position: relative; }
-            body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: url('${SITE_BG}') no-repeat center center/cover; z-index: -1; filter: brightness(0.35) blur(2px); }
-            .navbar { background: rgba(22, 27, 34, 0.85); padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; }
-            .user-profile { display: flex; align-items: center; gap: 12px; }
-            .user-avatar { width: 45px; height: 45px; border-radius: 50%; border: 2px solid #5865f2; }
-            .btn-logout { background: rgba(237, 66, 69, 0.2); color: #ed4245; padding: 8px 16px; border-radius: 8px; text-decoration: none; font-weight: 600; }
-            .container { max-width: 1100px; margin: 40px auto; padding: 0 20px; }
-            .guilds-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; }
-            .guild-card { background: rgba(24, 30, 41, 0.85); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 20px; display: flex; flex-direction: column; align-items: center; text-align: center; }
-            .guild-icon { width: 70px; height: 70px; border-radius: 20px; margin-bottom: 12px; object-fit: cover; }
-            .guild-name { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
-            .guild-id { font-size: 12px; color: #80848e; margin-bottom: 18px; }
-            .btn-manage { width: 100%; background: rgba(88,101,242,0.2); color: #5865f2; padding: 10px; border-radius: 10px; text-decoration: none; font-weight: 700; }
+            body { color: #ffffff; min-height: 100vh; background-color: #07090e; position: relative; }
+            body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: url('${SITE_BG}') no-repeat center center/cover; z-index: -1; filter: brightness(0.28) blur(4px); }
+            .navbar { background: rgba(12, 16, 24, 0.85); backdrop-filter: blur(16px); border-bottom: 1px solid rgba(255,255,255,0.08); padding: 18px 40px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+            .user-profile { display: flex; align-items: center; gap: 14px; font-weight: 700; font-size: 16px; }
+            .user-avatar { width: 48px; height: 48px; border-radius: 50%; border: 2px solid #5865f2; box-shadow: 0 0 15px rgba(88,101,242,0.4); }
+            .btn-logout { background: rgba(237, 66, 69, 0.15); color: #ed4245; border: 1px solid rgba(237, 66, 69, 0.3); padding: 10px 20px; border-radius: 12px; text-decoration: none; font-weight: 700; transition: all 0.3s; }
+            .btn-logout:hover { background: rgba(237, 66, 69, 0.3); }
+            .container { max-width: 1200px; margin: 45px auto; padding: 0 25px; }
+            .page-title { font-size: 24px; font-weight: 900; margin-bottom: 30px; display: flex; align-items: center; gap: 12px; text-shadow: 0 2px 10px rgba(0,0,0,0.5); }
+            .guilds-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 25px; }
+            .guild-card { background: rgba(14, 18, 27, 0.8); backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.08); border-radius: 20px; padding: 25px; display: flex; flex-direction: column; align-items: center; text-align: center; transition: all 0.3s ease; box-shadow: 0 15px 35px rgba(0,0,0,0.4); }
+            .guild-card:hover { transform: translateY(-5px); border-color: rgba(88,101,242,0.4); box-shadow: 0 20px 40px rgba(88,101,242,0.2); }
+            .guild-icon { width: 80px; height: 80px; border-radius: 22px; margin-bottom: 16px; object-fit: cover; border: 2px solid rgba(255,255,255,0.1); box-shadow: 0 8px 20px rgba(0,0,0,0.5); }
+            .guild-name { font-size: 19px; font-weight: 800; margin-bottom: 6px; color: #fff; }
+            .guild-id { font-size: 13px; color: #949ba4; margin-bottom: 22px; font-family: monospace; }
+            .btn-manage { width: 100%; background: linear-gradient(135deg, rgba(88,101,242,0.25), rgba(88,101,242,0.1)); border: 1px solid rgba(88,101,242,0.4); color: #7983f5; padding: 12px; border-radius: 12px; text-decoration: none; font-weight: 800; transition: all 0.3s; }
+            .btn-manage:hover { background: #5865f2; color: #fff; box-shadow: 0 5px 15px rgba(88,101,242,0.4); }
         </style>
     </head>
     <body>
@@ -347,7 +351,7 @@ app.get('/dashboard', async (req, res) => {
             <a href="/logout" class="btn-logout"><i class="fa-solid fa-right-from-bracket"></i> تسجيل الخروج</a>
         </div>
         <div class="container">
-            <h2 style="margin-bottom: 25px;"><i class="fa-solid fa-server" style="color:#5865f2;"></i> اختر السيرفر لإدارة البوت</h2>
+            <div class="page-title"><i class="fa-solid fa-server" style="color:#5865f2;"></i> اختر السيرفر لإدارة البوت</div>
             <div class="guilds-grid">${guildsCardsHtml}</div>
         </div>
     </body>
@@ -377,37 +381,47 @@ app.get('/dashboard/:guildId', async (req, res) => {
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>إعدادات ${guild.name} | ${BOT_NAME}</title>
-        <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+        <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
         <style>
             * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Cairo', sans-serif; }
-            body { color: #ffffff; min-height: 100vh; display: flex; flex-direction: column; background-color: #0f1219; position: relative; }
-            body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: url('${SITE_BG}') no-repeat center center/cover; z-index: -1; filter: brightness(0.35) blur(2px); }
-            .navbar { background: rgba(22, 27, 34, 0.85); padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; }
-            .btn-back { color: #5865f2; text-decoration: none; font-weight: 700; }
-            .main-layout { display: flex; flex: 1; max-width: 1200px; width: 100%; margin: 30px auto; gap: 25px; padding: 0 20px; }
-            .sidebar { width: 270px; background: rgba(24, 30, 41, 0.85); border-radius: 16px; padding: 15px; display: flex; flex-direction: column; gap: 8px; height: fit-content; }
-            .tab-btn { background: transparent; border: none; color: #949ba4; padding: 12px 16px; border-radius: 10px; cursor: pointer; text-align: right; font-weight: 700; display: flex; gap: 12px; }
-            .tab-btn.active { background: #5865f2; color: #fff; }
-            .content-panel { flex: 1; background: rgba(24, 30, 41, 0.85); border-radius: 16px; padding: 30px; }
-            .tab-content { display: none; }
+            body { color: #ffffff; min-height: 100vh; display: flex; flex-direction: column; background-color: #07090e; position: relative; }
+            body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: url('${SITE_BG}') no-repeat center center/cover; z-index: -1; filter: brightness(0.28) blur(4px); }
+            .navbar { background: rgba(12, 16, 24, 0.85); backdrop-filter: blur(16px); border-bottom: 1px solid rgba(255,255,255,0.08); padding: 18px 40px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+            .btn-back { color: #7983f5; text-decoration: none; font-weight: 800; display: inline-flex; align-items: center; gap: 8px; background: rgba(88,101,242,0.1); padding: 8px 16px; border-radius: 10px; border: 1px solid rgba(88,101,242,0.2); transition: 0.3s; }
+            .btn-back:hover { background: rgba(88,101,242,0.25); color: #fff; }
+            .server-badge { font-weight: 800; font-size: 16px; color: #fff; background: rgba(255,255,255,0.05); padding: 8px 16px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.08); }
+            .main-layout { display: flex; flex: 1; max-width: 1250px; width: 100%; margin: 40px auto; gap: 30px; padding: 0 25px; }
+            .sidebar { width: 280px; background: rgba(14, 18, 27, 0.85); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.08); border-radius: 20px; padding: 20px; display: flex; flex-direction: column; gap: 10px; height: fit-content; box-shadow: 0 15px 35px rgba(0,0,0,0.5); }
+            .tab-btn { background: transparent; border: none; color: #949ba4; padding: 14px 18px; border-radius: 12px; cursor: pointer; text-align: right; font-weight: 800; font-size: 15px; display: flex; align-items: center; gap: 14px; transition: all 0.3s ease; }
+            .tab-btn:hover { background: rgba(255,255,255,0.04); color: #fff; }
+            .tab-btn.active { background: linear-gradient(135deg, #5865F2, #4752C4); color: #fff; box-shadow: 0 8px 20px rgba(88,101,242,0.4); }
+            .content-panel { flex: 1; background: rgba(14, 18, 27, 0.85); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.08); border-radius: 20px; padding: 35px; box-shadow: 0 20px 45px rgba(0,0,0,0.6); }
+            .tab-content { display: none; animation: fadeIn 0.4s ease; }
             .tab-content.active { display: block; }
-            h2 { font-size: 20px; font-weight: 800; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 12px; }
+            @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+            h2 { font-size: 22px; font-weight: 900; margin-bottom: 25px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 15px; color: #fff; display: flex; align-items: center; gap: 12px; }
             .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
-            .form-group { margin-bottom: 20px; }
-            label { display: block; margin-bottom: 8px; font-weight: 600; color: #b5bac1; font-size: 14px; }
-            input, select, textarea { width: 100%; padding: 12px; background: rgba(11, 14, 20, 0.7); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #fff; }
-            select[multiple] { height: 110px; }
-            select option { background: #161b22; padding: 4px; }
-            .btn-save { background: #5865f2; color: #fff; border: none; padding: 12px 28px; border-radius: 8px; font-weight: 700; cursor: pointer; margin-top: 10px; }
-            .cmd-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 15px; }
-            .cmd-card { background: rgba(11, 14, 20, 0.7); padding: 15px; border-radius: 10px; }
-            .cmd-card label { color: #5865f2; font-weight: 700; font-size: 15px; display: block; margin-bottom: 5px; }
-            .hint { font-size: 11px; color: #949ba4; margin-top: 4px; }
+            .form-group { margin-bottom: 22px; }
+            label { display: block; margin-bottom: 8px; font-weight: 700; color: #b5bac1; font-size: 14px; }
+            input, select, textarea { width: 100%; padding: 14px; background: rgba(8, 11, 16, 0.75); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; color: #fff; font-size: 14px; transition: all 0.3s; }
+            input:focus, select:focus, textarea:focus { border-color: #5865f2; outline: none; box-shadow: 0 0 0 3px rgba(88,101,242,0.25); background: rgba(8, 11, 16, 0.95); }
+            select[multiple] { height: 130px; }
+            select option { background: #0c1018; padding: 8px; color: #fff; }
+            .btn-save { background: linear-gradient(135deg, #5865F2, #4752C4); color: #fff; border: none; padding: 14px 32px; border-radius: 12px; font-weight: 900; font-size: 15px; cursor: pointer; margin-top: 15px; transition: all 0.3s; box-shadow: 0 8px 20px rgba(88,101,242,0.4); }
+            .btn-save:hover { transform: translateY(-2px); box-shadow: 0 12px 25px rgba(88,101,242,0.6); }
+            .cmd-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 18px; }
+            .cmd-card { background: rgba(8, 11, 16, 0.65); border: 1px solid rgba(255,255,255,0.06); padding: 18px; border-radius: 14px; transition: 0.3s; }
+            .cmd-card:hover { border-color: rgba(88,101,242,0.3); }
+            .cmd-card label { color: #7983f5; font-weight: 800; font-size: 15px; display: block; margin-bottom: 8px; }
+            .hint { font-size: 12px; color: #949ba4; margin-top: 6px; }
         </style>
     </head>
     <body>
-        <div class="navbar"><a href="/dashboard" class="btn-back"><i class="fa-solid fa-arrow-right"></i> العودة</a><span>سيرفر: <b>${guild.name}</b></span></div>
+        <div class="navbar">
+            <a href="/dashboard" class="btn-back"><i class="fa-solid fa-arrow-right"></i> العودة للسيرفرات</a>
+            <div class="server-badge"><i class="fa-brands fa-discord" style="color: #5865f2;"></i> ${guild.name}</div>
+        </div>
         <div class="main-layout">
             <div class="sidebar">
                 <button class="tab-btn active" onclick="openTab(event, 'botsettings')"><i class="fa-solid fa-robot"></i> إعدادات البوت</button>
@@ -450,7 +464,7 @@ app.get('/dashboard/:guildId', async (req, res) => {
                     <button type="button" class="btn-save" onclick="saveBotSettings()">حفظ إعدادات البوت</button>
                 </div>
                 <div id="channels" class="tab-content">
-                    <h2>إعدادات الرومات والرتب الذكية</h2>
+                    <h2><i class="fa-solid fa-hashtag" style="color:#5865f2;"></i> إعدادات الرومات والرتب الذكية</h2>
                     <div class="form-grid">
                         <div class="form-group"><label>رتبة الإدارة الرئيسية:</label><select id="staffRoleId" class="single-role-select"><option value="">جاري جلب الرتب...</option></select></div>
                         <div class="form-group"><label>كاتيجوري التكتات:</label><input type="text" id="ticketCategoryId"></div>
@@ -459,24 +473,24 @@ app.get('/dashboard/:guildId', async (req, res) => {
                     <button type="button" class="btn-save" onclick="saveChannels()">حفظ التغييرات</button>
                 </div>
                 <div id="design" class="tab-content">
-                    <h2>تخصيص نصوص وصور البانل والتكت</h2>
+                    <h2><i class="fa-solid fa-palette" style="color:#5865f2;"></i> تخصيص نصوص وصور البانل والتكت</h2>
                     <div class="form-group"><label>صورة البانل:</label><input type="text" id="panelImage"></div>
                     <div class="form-group"><label>صورة التكت الداخلي:</label><input type="text" id="ticketImage"></div>
                     <div class="form-group"><label>عنوان البانل:</label><input type="text" id="panelTitle"></div>
-                    <div class="form-group"><label>نص البانل:</label><textarea id="panelDescription" rows="3"></textarea></div>
+                    <div class="form-group"><label>نص البانل:</label><textarea id="panelDescription" rows="4"></textarea></div>
                     <button type="button" class="btn-save" onclick="saveDesign()">حفظ التصميم</button>
                 </div>
                 <div id="categories" class="tab-content">
-                    <h2>قائمة فتح التكتات</h2>
-                    <div class="form-group"><label>الخيار الأول:</label><input type="text" id="opt1_label"><input type="text" id="opt1_emoji" style="margin-top:5px;"><input type="text" id="opt1_desc" style="margin-top:5px;"></div>
-                    <div class="form-group"><label>الخيار الثاني:</label><input type="text" id="opt2_label"><input type="text" id="opt2_emoji" style="margin-top:5px;"><input type="text" id="opt2_desc" style="margin-top:5px;"></div>
-                    <div class="form-group"><label>الخيار الثالث:</label><input type="text" id="opt3_label"><input type="text" id="opt3_emoji" style="margin-top:5px;"><input type="text" id="opt3_desc" style="margin-top:5px;"></div>
+                    <h2><i class="fa-solid fa-list-check" style="color:#5865f2;"></i> قائمة فتح التكتات</h2>
+                    <div class="form-group"><label>الخيار الأول:</label><input type="text" id="opt1_label" placeholder="العنوان"><input type="text" id="opt1_emoji" placeholder="الإيموجي" style="margin-top:8px;"><input type="text" id="opt1_desc" placeholder="الوصف" style="margin-top:8px;"></div>
+                    <div class="form-group"><label>الخيار الثاني:</label><input type="text" id="opt2_label" placeholder="العنوان"><input type="text" id="opt2_emoji" placeholder="الإيموجي" style="margin-top:8px;"><input type="text" id="opt2_desc" placeholder="الوصف" style="margin-top:8px;"></div>
+                    <div class="form-group"><label>الخيار الثالث:</label><input type="text" id="opt3_label" placeholder="العنوان"><input type="text" id="opt3_emoji" placeholder="الإيموجي" style="margin-top:8px;"><input type="text" id="opt3_desc" placeholder="الوصف" style="margin-top:8px;"></div>
                     <button type="button" class="btn-save" onclick="saveCategories()">حفظ الأقسام</button>
                 </div>
                 <div id="cmdnames" class="tab-content">
-                    <h2>تخصيص الأوامر والبادئة</h2>
-                    <div class="form-group"><label>البادئة (Prefix):</label><input type="text" id="prefix"></div>
-                    <div class="cmd-grid">
+                    <h2><i class="fa-solid fa-terminal" style="color:#5865f2;"></i> تخصيص الأوامر والبادئة</h2>
+                    <div class="form-group"><label>البادئة (Prefix):</label><input type="text" id="prefix" style="max-width: 250px;"></div>
+                    <div class="cmd-grid" style="margin-top: 15px;">
                         <div class="cmd-card"><label>أمر الإضافة</label><input type="text" id="alias_add"></div>
                         <div class="cmd-card"><label>أمر المنشن</label><input type="text" id="alias_come"></div>
                         <div class="cmd-card"><label>أمر تغيير الاسم</label><input type="text" id="alias_rename"></div>
@@ -491,7 +505,7 @@ app.get('/dashboard/:guildId', async (req, res) => {
                     <button type="button" class="btn-save" onclick="saveAliases()">حفظ الأوامر</button>
                 </div>
                 <div id="permissions" class="tab-content">
-                    <h2>صلاحيات الأوامر بالرتب (اضغط Ctrl للاختيار المتعدد)</h2>
+                    <h2><i class="fa-solid fa-user-shield" style="color:#5865f2;"></i> صلاحيات الأوامر بالرتب (اضغط Ctrl للاختيار المتعدد)</h2>
                     <div class="cmd-grid">
                         <div class="cmd-card"><label>add</label><select id="perm_add" class="multi-role-select" multiple></select><div class="hint">اتركه فارغاً للجميع</div></div>
                         <div class="cmd-card"><label>come</label><select id="perm_come" class="multi-role-select" multiple></select><div class="hint">اتركه فارغاً للجميع</div></div>
@@ -507,7 +521,7 @@ app.get('/dashboard/:guildId', async (req, res) => {
                     <button type="button" class="btn-save" onclick="savePermissions()">حفظ الصلاحيات</button>
                 </div>
                 <div id="points" class="tab-content">
-                    <h2>النقاط والمهل</h2>
+                    <h2><i class="fa-solid fa-trophy" style="color:#5865f2;"></i> النقاط والمهل</h2>
                     <div class="form-grid">
                         <div class="form-group"><label>نقاط الاستلام:</label><input type="number" id="claimPoints"></div>
                         <div class="form-group"><label>نقاط التحذير:</label><input type="number" id="warnPoints"></div>
@@ -555,7 +569,7 @@ app.get('/dashboard/:guildId', async (req, res) => {
                     const res = await fetch('/api/settings/' + currentGuildId + '?_t=' + Date.now());
                     const data = await res.json();
                     if (data && !data.error) {
-                        // تعبئة حقول إعدادات البوت تلقائياً عند أي فتح أو Refresh
+                        // تعبئة حقول إعدادات البوت والبانر تلقائياً عند أي فتح أو Refresh
                         if (data.botName !== undefined) document.getElementById('botName').value = data.botName;
                         if (data.botAvatar !== undefined) document.getElementById('botAvatar').value = data.botAvatar;
                         if (data.botBanner !== undefined) document.getElementById('botBanner').value = data.botBanner;

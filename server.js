@@ -22,7 +22,7 @@ if (MONGO_URI) {
         .catch(err => console.error('MongoDB Error:', err));
 }
 
-// موديل GuildSettings
+// موديل GuildSettings مضافاً إليه رابط البانر
 const GuildSettings = mongoose.models.GuildSettings || mongoose.model('GuildSettings', new mongoose.Schema({
   guildId: { type: String, required: true, unique: true },
   prefix: { type: String, default: '-' },
@@ -36,6 +36,7 @@ const GuildSettings = mongoose.models.GuildSettings || mongoose.model('GuildSett
   
   botName: { type: String, default: 'Light Ticket Bot' },
   botAvatar: { type: String, default: 'https://i.postimg.cc/tJW3r0PJ/Screenshot-20261001-232609-ibis-Paint-X.jpg' },
+  botBanner: { type: String, default: '' },
   botStatus: { type: String, default: 'online' },
   activityType: { type: Number, default: 0 },
   activityText: { type: String, default: '-help / التذاكر' },
@@ -419,10 +420,11 @@ app.get('/dashboard/:guildId', async (req, res) => {
             </div>
             <div class="content-panel">
                 <div id="botsettings" class="tab-content active">
-                    <h2><i class="fa-solid fa-robot" style="color:#5865f2;"></i> إعدادات حالة واسم وصورة البوت</h2>
+                    <h2><i class="fa-solid fa-robot" style="color:#5865f2;"></i> إعدادات حالة واسم وصورة وبانر البوت</h2>
                     <div class="form-grid">
                         <div class="form-group"><label>اسم البوت (Bot Name):</label><input type="text" id="botName"></div>
                         <div class="form-group"><label>رابط صورة البوت (Avatar URL):</label><input type="text" id="botAvatar"></div>
+                        <div class="form-group" style="grid-column: 1 / -1;"><label>رابط بانر البوت (Banner URL):</label><input type="text" id="botBanner"></div>
                         <div class="form-group">
                             <label>حالة البوت (Status):</label>
                             <select id="botStatus">
@@ -556,6 +558,7 @@ app.get('/dashboard/:guildId', async (req, res) => {
                         // تعبئة حقول إعدادات البوت تلقائياً عند أي فتح أو Refresh
                         if (data.botName !== undefined) document.getElementById('botName').value = data.botName;
                         if (data.botAvatar !== undefined) document.getElementById('botAvatar').value = data.botAvatar;
+                        if (data.botBanner !== undefined) document.getElementById('botBanner').value = data.botBanner;
                         if (data.botStatus !== undefined) document.getElementById('botStatus').value = data.botStatus;
                         if (data.activityType !== undefined) document.getElementById('activityType').value = data.activityType;
                         if (data.activityText !== undefined) document.getElementById('activityText').value = data.activityText;
@@ -624,6 +627,7 @@ app.get('/dashboard/:guildId', async (req, res) => {
                 postPayload({
                     botName: document.getElementById('botName').value.trim(),
                     botAvatar: document.getElementById('botAvatar').value.trim(),
+                    botBanner: document.getElementById('botBanner').value.trim(),
                     botStatus: document.getElementById('botStatus').value,
                     activityType: Number(document.getElementById('activityType').value) || 0,
                     activityText: document.getElementById('activityText').value.trim()

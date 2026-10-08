@@ -16,16 +16,16 @@ const BOT_NAME = process.env.BOT_NAME || 'Light Ticket Bot';
 const BOT_AVATAR = process.env.BOT_AVATAR || 'https://i.postimg.cc/tJW3r0PJ/Screenshot-20261001-232609-ibis-Paint-X.jpg';
 const SITE_BG = 'https://i.postimg.cc/s2x5kG7S/1791496064027.jpg';
 
-// الاتصال بـ MongoDB
 if (MONGO_URI) {
     mongoose.connect(MONGO_URI)
         .then(() => console.log('MongoDB Connected in Dashboard'))
         .catch(err => console.error('MongoDB Error:', err));
 }
 
-// موديل GuildSettings
+// موديل GuildSettings المطور لدعم أسماء الأوامر والبادئة المخصصة
 const GuildSettings = mongoose.models.GuildSettings || mongoose.model('GuildSettings', new mongoose.Schema({
   guildId: { type: String, required: true, unique: true },
+  prefix: { type: String, default: '-' },
   staffRoleId: { type: String, default: '1555478928708337775' },
   ticketCategoryId: { type: String, default: '1555176022352208012' },
   logChannelId: { type: String, default: '1555488444182962216' },
@@ -48,10 +48,24 @@ const GuildSettings = mongoose.models.GuildSettings || mongoose.model('GuildSett
     ]
   },
 
-  commandPermissions: {
+  commandPermissions: { type: Map, of: String, default: {} },
+
+  // أسماء الأوامر المخصصة
+  commandAliases: {
     type: Map,
     of: String,
-    default: {}
+    default: {
+      add: 'add',
+      come: 'come',
+      rename: 'rename',
+      claim: 'استلام',
+      timeout: 'تايم',
+      warn: 'تحذير',
+      close: 'اغلاق',
+      delete: 'حذف',
+      addpoints: 'addpoints',
+      removepoints: 'removepoints'
+    }
   }
 }, { timestamps: true }));
 
@@ -197,7 +211,6 @@ app.get('/api/auth/callback', async (req, res) => {
     }
 });
 
-// الصفحة الرئيسية مع OpenGraph الشامل لجميع المنصات
 app.get('/', (req, res) => {
     const html = `
     <!DOCTYPE html>
@@ -207,7 +220,6 @@ app.get('/', (req, res) => {
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>${BOT_NAME} - لوحة التحكم الاحترافية</title>
 
-        <!-- Open Graph / Discord Embed Metadata -->
         <meta property="og:type" content="website">
         <meta property="og:url" content="https://ticket-bot-board.vercel.app/">
         <meta property="og:title" content="${BOT_NAME} - لوحة التحكم الرسمية">
@@ -218,7 +230,6 @@ app.get('/', (req, res) => {
         <meta property="og:image:width" content="1200">
         <meta property="og:image:height" content="630">
 
-        <!-- Twitter Card Embed -->
         <meta name="twitter:card" content="summary_large_image">
         <meta name="twitter:title" content="${BOT_NAME} - لوحة التحكم الرسمية">
         <meta name="twitter:description" content="قم بإدارة وتخصيص كافة إعدادات البوت، الأقسام، والصلاحيات بسهولة عبر لوحة التحكم الرسمية.">
@@ -314,7 +325,6 @@ app.get('/', (req, res) => {
     res.send(html);
 });
 
-// قائمة السيرفرات
 app.get('/dashboard', async (req, res) => {
     if (!req.session.user) return res.redirect('/login');
 
@@ -433,7 +443,6 @@ app.get('/dashboard', async (req, res) => {
     res.send(html);
 });
 
-// صفحة الإعدادات الشاملة
 app.get('/dashboard/:guildId', async (req, res) => {
     if (!req.session.user) return res.redirect('/login');
 
@@ -459,7 +468,7 @@ app.get('/dashboard/:guildId', async (req, res) => {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>إعدادات ${guild.name} | ${BOT_NAME}</title>
+        <title>إعدادات ${guild.name} \vert{}${BOT_NAME}</title>
 
         <meta property="og:type" content="website">
         <meta property="og:title" content="${BOT_NAME} - إعدادات السيرفر">
@@ -521,6 +530,7 @@ app.get('/dashboard/:guildId', async (req, res) => {
                 <button class="tab-btn active" onclick="openTab(event, 'channels')"><i class="fa-solid fa-hashtag"></i> الرومات والرتب</button>
                 <button class="tab-btn" onclick="openTab(event, 'design')"><i class="fa-solid fa-palette"></i> التصاميم والصور</button>
                 <button class="tab-btn" onclick="openTab(event, 'categories')"><i class="fa-solid fa-list-check"></i> أقسام القائمة</button>
+                <button class="tab-btn" onclick="openTab(event, 'cmdnames')"><i class="fa-solid fa-terminal"></i> أسماء الأوامر والبادئة</button>
                 <button class="tab-btn" onclick="openTab(event, 'permissions')"><i class="fa-solid fa-user-shield"></i> صلاحيات الأوامر</button>
                 <button class="tab-btn" onclick="openTab(event, 'points')"><i class="fa-solid fa-trophy"></i> إعدادات النقاط</button>
             </div>
@@ -592,25 +602,48 @@ app.get('/dashboard/:guildId', async (req, res) => {
                     <button type="button" class="btn-save" onclick="saveCategories()"><i class="fa-solid fa-floppy-disk"></i> حفظ الأقسام</button>
                 </div>
 
-                <!-- Tab 4: Command Permissions -->
+                <!-- Tab 4: Custom Command Names & Prefix -->
+                <div id="cmdnames" class="tab-content">
+                    <h2><i class="fa-solid fa-terminal" style="color:#3498db;"></i> تخصيص أسماء الأوامر والبادئة (Prefix)</h2>
+                    <div class="form-group">
+                        <label>بادئة البوت بالسيرفر (Prefix):</label>
+                        <input type="text" id="prefix" placeholder="مثال: - أو ! أو .">
+                    </div>
+                    <p style="color:#949ba4; font-size:13px; margin-bottom:15px;">يمكنك تغيير الكلمة التي يُنفذ بها الأمر حسب رغبتك (بدون كتابة البادئة):</p>
+                    <div class="cmd-grid">
+                        <div class="cmd-card"><label>أمر الإضافة</label><input type="text" id="alias_add" placeholder="افتراضي: add"></div>
+                        <div class="cmd-card"><label>أمر المنشن</label><input type="text" id="alias_come" placeholder="افتراضي: come"></div>
+                        <div class="cmd-card"><label>أمر تغيير الاسم</label><input type="text" id="alias_rename" placeholder="افتراضي: rename"></div>
+                        <div class="cmd-card"><label>أمر الاستلام</label><input type="text" id="alias_claim" placeholder="افتراضي: استلام"></div>
+                        <div class="cmd-card"><label>أمر التايم أوت</label><input type="text" id="alias_timeout" placeholder="افتراضي: تايم"></div>
+                        <div class="cmd-card"><label>أمر التحذير</label><input type="text" id="alias_warn" placeholder="افتراضي: تحذير"></div>
+                        <div class="cmd-card"><label>أمر إغلاق التكت</label><input type="text" id="alias_close" placeholder="افتراضي: اغلاق"></div>
+                        <div class="cmd-card"><label>أمر حذف التكت</label><input type="text" id="alias_delete" placeholder="افتراضي: حذف"></div>
+                        <div class="cmd-card"><label>أمر إضافة نقاط</label><input type="text" id="alias_addpoints" placeholder="افتراضي: addpoints"></div>
+                        <div class="cmd-card"><label>أمر خصم نقاط</label><input type="text" id="alias_removepoints" placeholder="افتراضي: removepoints"></div>
+                    </div>
+                    <button type="button" class="btn-save" onclick="saveAliases()"><i class="fa-solid fa-floppy-disk"></i> حفظ أسماء الأوامر</button>
+                </div>
+
+                <!-- Tab 5: Command Permissions -->
                 <div id="permissions" class="tab-content">
                     <h2><i class="fa-solid fa-user-shield" style="color:#eb459e;"></i> صلاحيات الأوامر بالرتب (ID الرتبة المسموحة)</h2>
                     <div class="cmd-grid">
-                        <div class="cmd-card"><label>-add</label><input type="text" id="perm_add" placeholder="ID الرتبة المسموحة"></div>
-                        <div class="cmd-card"><label>-come</label><input type="text" id="perm_come" placeholder="ID الرتبة المسموحة"></div>
-                        <div class="cmd-card"><label>-rename</label><input type="text" id="perm_rename" placeholder="ID الرتبة المسموحة"></div>
-                        <div class="cmd-card"><label>-استلام</label><input type="text" id="perm_claim" placeholder="ID الرتبة المسموحة"></div>
-                        <div class="cmd-card"><label>-تايم</label><input type="text" id="perm_timeout" placeholder="ID الرتبة المسموحة"></div>
-                        <div class="cmd-card"><label>-تحذير</label><input type="text" id="perm_warn" placeholder="ID الرتبة المسموحة"></div>
-                        <div class="cmd-card"><label>-اغلاق</label><input type="text" id="perm_close" placeholder="ID الرتبة المسموحة"></div>
-                        <div class="cmd-card"><label>-حذف</label><input type="text" id="perm_delete" placeholder="ID الرتبة المسموحة"></div>
-                        <div class="cmd-card"><label>-addpoints</label><input type="text" id="perm_addpoints" placeholder="ID الرتبة المسموحة"></div>
-                        <div class="cmd-card"><label>-removepoints</label><input type="text" id="perm_removepoints" placeholder="ID الرتبة المسموحة"></div>
+                        <div class="cmd-card"><label>أمر الإضافة</label><input type="text" id="perm_add" placeholder="ID الرتبة المسموحة"></div>
+                        <div class="cmd-card"><label>أمر المنشن</label><input type="text" id="perm_come" placeholder="ID الرتبة المسموحة"></div>
+                        <div class="cmd-card"><label>أمر تغيير الاسم</label><input type="text" id="perm_rename" placeholder="ID الرتبة المسموحة"></div>
+                        <div class="cmd-card"><label>أمر الاستلام</label><input type="text" id="perm_claim" placeholder="ID الرتبة المسموحة"></div>
+                        <div class="cmd-card"><label>أمر التايم أوت</label><input type="text" id="perm_timeout" placeholder="ID الرتبة المسموحة"></div>
+                        <div class="cmd-card"><label>أمر التحذير</label><input type="text" id="perm_warn" placeholder="ID الرتبة المسموحة"></div>
+                        <div class="cmd-card"><label>أمر إغلاق التكت</label><input type="text" id="perm_close" placeholder="ID الرتبة المسموحة"></div>
+                        <div class="cmd-card"><label>أمر حذف التكت</label><input type="text" id="perm_delete" placeholder="ID الرتبة المسموحة"></div>
+                        <div class="cmd-card"><label>أمر إضافة نقاط</label><input type="text" id="perm_addpoints" placeholder="ID الرتبة المسموحة"></div>
+                        <div class="cmd-card"><label>أمر خصم نقاط</label><input type="text" id="perm_removepoints" placeholder="ID الرتبة المسموحة"></div>
                     </div>
                     <button type="button" class="btn-save" onclick="savePermissions()"><i class="fa-solid fa-floppy-disk"></i> حفظ الصلاحيات</button>
                 </div>
 
-                <!-- Tab 5: Points & Settings -->
+                <!-- Tab 6: Points & Settings -->
                 <div id="points" class="tab-content">
                     <h2><i class="fa-solid fa-trophy" style="color:#f1c40f;"></i> إعدادات النقاط والمهل الزمنية</h2>
                     <div class="form-grid">
@@ -645,6 +678,7 @@ app.get('/dashboard/:guildId', async (req, res) => {
                     const res = await fetch('/api/settings/' + currentGuildId);
                     const data = await res.json();
                     if (data && !data.error) {
+                        if (data.prefix) document.getElementById('prefix').value = data.prefix;
                         if (data.staffRoleId) document.getElementById('staffRoleId').value = data.staffRoleId;
                         if (data.ticketCategoryId) document.getElementById('ticketCategoryId').value = data.ticketCategoryId;
                         if (data.logChannelId) document.getElementById('logChannelId').value = data.logChannelId;
@@ -670,7 +704,15 @@ app.get('/dashboard/:guildId', async (req, res) => {
 
                             document.getElementById('opt3_label').value = data.selectOptions[2].label || '';
                             document.getElementById('opt3_emoji').value = data.selectOptions[2].emoji || '';
-                            document.getElementById('opt3_desc').value = data.selectOptions[2].description || '';
+                            document.getElementById('opt3_desc').value = data.selectOptions[0].description || '';
+                        }
+
+                        if (data.commandAliases) {
+                            const aliases = data.commandAliases;
+                            ['add', 'come', 'rename', 'claim', 'timeout', 'warn', 'close', 'delete', 'addpoints', 'removepoints'].forEach(cmd => {
+                                const el = document.getElementById('alias_' + cmd);
+                                if (el && aliases[cmd]) el.value = aliases[cmd];
+                            });
                         }
 
                         if (data.commandPermissions) {
@@ -757,6 +799,15 @@ app.get('/dashboard/:guildId', async (req, res) => {
                     }
                 ];
                 postPayload({ selectOptions }, '✅ تم حفظ أقسام القائمة المخصصة بنجاح!');
+            }
+
+            function saveAliases() {
+                const commandAliases = {};
+                ['add', 'come', 'rename', 'claim', 'timeout', 'warn', 'close', 'delete', 'addpoints', 'removepoints'].forEach(cmd => {
+                    commandAliases[cmd] = document.getElementById('alias_' + cmd).value.trim() || cmd;
+                });
+                const prefix = document.getElementById('prefix').value.trim() || '-';
+                postPayload({ prefix, commandAliases }, '✅ تم حفظ البادئة وأسماء الأوامر الجديدة بنجاح!');
             }
 
             function savePermissions() {

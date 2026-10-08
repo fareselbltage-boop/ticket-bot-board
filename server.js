@@ -23,7 +23,7 @@ if (MONGO_URI) {
         .catch(err => console.error('MongoDB Error:', err));
 }
 
-// تعريف موديل GuildSettings
+// موديل GuildSettings المكتمل بكل الخصائص
 const GuildSettings = mongoose.models.GuildSettings || mongoose.model('GuildSettings', new mongoose.Schema({
   guildId: { type: String, required: true, unique: true },
   staffRoleId: { type: String, default: '1555478928708337775' },
@@ -32,7 +32,41 @@ const GuildSettings = mongoose.models.GuildSettings || mongoose.model('GuildSett
   panelImage: { type: String, default: 'https://i.postimg.cc/j5x6JgQH/Untitled900-20260927182744.jpg' },
   ticketImage: { type: String, default: 'https://i.postimg.cc/j5x6JgQH/Untitled900-20260927182744.jpg' },
   panelTitle: { type: String, default: '🎫 LIGHT Support | الدعم الفني' },
-  panelDescription: { type: String, default: 'مرحباً بك في نظام الدعم الفني الخاص بسيرفر LIGHT.' }
+  panelDescription: { type: String, default: 'مرحباً بك في نظام الدعم الفني الخاص بسيرفر LIGHT.' },
+  
+  // النقاط والمهل الزمنية
+  claimPoints: { type: Number, default: 1 },
+  warnPoints: { type: Number, default: 1 },
+  timeoutPoints: { type: Number, default: 1 },
+  renameCooldown: { type: Number, default: 10 },
+
+  // أقسام قائمة الاختيار
+  selectOptions: {
+    type: Array,
+    default: [
+      { label: 'استفسار', value: 'inquiry', emoji: '❓', description: 'للاستفسارات العامة والأسئلة' },
+      { label: 'شكوى', value: 'complaint', emoji: '⚠️', description: 'تقديم شكوى إدارية' },
+      { label: 'مشكلة تقنية', value: 'technical', emoji: '🛠', description: 'المشاكل الفنية والتقنية' }
+    ]
+  },
+
+  // صلاحيات الأوامر المدارة
+  commandPermissions: {
+    type: Map,
+    of: String,
+    default: {
+      add: '',
+      come: '',
+      rename: '',
+      claim: '',
+      timeout: '',
+      warn: '',
+      close: '',
+      delete: '',
+      addpoints: '',
+      removepoints: ''
+    }
+  }
 }, { timestamps: true }));
 
 app.set('trust proxy', 1);
@@ -40,7 +74,7 @@ app.set('trust proxy', 1);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// منع المتصفح والسيرفر من تخزين الصفحات كـ Cache لضمان ظهور أي تحديث فوراً عند الـ Refresh
+// منع تخزين الصفحات كـ Cache لضمان ظهور التحديثات لحظياً عند Refresh
 app.use((req, res, next) => {
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     res.set('Pragma', 'no-cache');
@@ -64,7 +98,7 @@ app.use(session({
     }
 }));
 
-// دالة تجديد التوكن وجلب قائمة السيرفرات الحية لحظياً
+// دالة جديد التوكن وتحديث سيرفرات ديسكورد الحية
 async function getFreshUserGuilds(req) {
     let accessToken = req.session.accessToken;
 
@@ -129,15 +163,7 @@ app.post('/api/settings/:guildId', async (req, res) => {
 
     try {
         const guildId = String(req.params.guildId);
-        const updateData = {
-            staffRoleId: req.body.staffRoleId,
-            ticketCategoryId: req.body.ticketCategoryId,
-            logChannelId: req.body.logChannelId,
-            panelImage: req.body.panelImage,
-            ticketImage: req.body.ticketImage,
-            panelTitle: req.body.panelTitle,
-            panelDescription: req.body.panelDescription
-        };
+        const updateData = req.body;
 
         const updated = await GuildSettings.findOneAndUpdate(
             { guildId: guildId },
@@ -152,13 +178,13 @@ app.post('/api/settings/:guildId', async (req, res) => {
     }
 });
 
-// تسجيل الدخول عبر ديسكورد
+// تسجيل الدخول
 app.get('/login', (req, res) => {
     const discordAuthUrl = `https://discord.com/api/oauth2/authorize?client_id=${process.env.CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=identify%20guilds`;
     res.redirect(discordAuthUrl);
 });
 
-// استقبال العودة من ديسكورد
+// العودة من الدخول
 app.get('/api/auth/callback', async (req, res) => {
     const code = req.query.code;
     if (!code) return res.send('لم يتم استقبال كود التحقق من ديسكورد.');
@@ -192,7 +218,7 @@ app.get('/api/auth/callback', async (req, res) => {
     }
 });
 
-// الصفحة الرئيسية (لوحة تسجيل الدخول)
+// الرئيسية
 app.get('/', (req, res) => {
     const html = `
     <!DOCTYPE html>
@@ -232,7 +258,6 @@ app.get('/', (req, res) => {
             .card {
                 background: rgba(15, 18, 25, 0.75);
                 backdrop-filter: blur(16px);
-                -webkit-backdrop-filter: blur(16px);
                 border: 1px solid rgba(255, 255, 255, 0.12);
                 border-radius: 24px;
                 padding: 45px 35px;
@@ -400,7 +425,7 @@ app.get('/dashboard', async (req, res) => {
     res.send(html);
 });
 
-// صفحة الإعدادات الشاملة
+// صفحة الإعدادات الشاملة المحدثة بالكامل
 app.get('/dashboard/:guildId', async (req, res) => {
     if (!req.session.user) return res.redirect('/login');
 
@@ -463,9 +488,9 @@ app.get('/dashboard/:guildId', async (req, res) => {
             input:focus, textarea:focus { border-color: #5865f2; }
             .btn-save { background: #5865f2; color: #fff; border: none; padding: 12px 28px; border-radius: 8px; font-weight: 700; cursor: pointer; transition: 0.3s; margin-top: 10px; }
             .btn-save:hover { background: #4752c4; }
-            .cmd-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
-            .cmd-item { background: rgba(11, 14, 20, 0.7); padding: 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center; }
-            .cmd-name { font-weight: 700; color: #5865f2; }
+            .cmd-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 15px; }
+            .cmd-card { background: rgba(11, 14, 20, 0.7); padding: 15px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.05); }
+            .cmd-card label { color: #5865f2; font-weight: 700; font-size: 15px; }
         </style>
     </head>
     <body>
@@ -501,7 +526,7 @@ app.get('/dashboard/:guildId', async (req, res) => {
                             <input type="text" id="logChannelId" placeholder="أدخل ID الروم">
                         </div>
                     </div>
-                    <button type="button" class="btn-save" onclick="saveSettings('${guild.id}')"><i class="fa-solid fa-floppy-disk"></i> حفظ التغييرات</button>
+                    <button type="button" class="btn-save" onclick="saveChannels()"><i class="fa-solid fa-floppy-disk"></i> حفظ التغييرات</button>
                 </div>
 
                 <!-- Tab 2: Panel & Ticket Design -->
@@ -523,43 +548,49 @@ app.get('/dashboard/:guildId', async (req, res) => {
                         <label>نص رسالة البانل الخارجي:</label>
                         <textarea id="panelDescription" rows="3"></textarea>
                     </div>
-                    <button type="button" class="btn-save" onclick="saveSettings('${guild.id}')"><i class="fa-solid fa-floppy-disk"></i> حفظ التصميم</button>
+                    <button type="button" class="btn-save" onclick="saveDesign()"><i class="fa-solid fa-floppy-disk"></i> حفظ التصميم</button>
                 </div>
 
                 <!-- Tab 3: Select Menu Categories -->
                 <div id="categories" class="tab-content">
                     <h2><i class="fa-solid fa-list-check" style="color:#23a55a;"></i> تخصيص خيارات قائمة فتح التكتات</h2>
                     <div class="form-group">
-                        <label>الخيار الأول (استفسار):</label>
-                        <input type="text" value="❓ | استفسار">
+                        <label>الخيار الأول (اسم - إيموجي - وصف):</label>
+                        <input type="text" id="opt1_label" placeholder="اسم القسم">
+                        <input type="text" id="opt1_emoji" placeholder="الإيموجي" style="margin-top:5px;">
+                        <input type="text" id="opt1_desc" placeholder="الوصف المقتضب" style="margin-top:5px;">
                     </div>
                     <div class="form-group">
-                        <label>الخيار الثاني (شكوى):</label>
-                        <input type="text" value="⚠️ | شكوى">
+                        <label>الخيار الثاني (اسم - إيموجي - وصف):</label>
+                        <input type="text" id="opt2_label" placeholder="اسم القسم">
+                        <input type="text" id="opt2_emoji" placeholder="الإيموجي" style="margin-top:5px;">
+                        <input type="text" id="opt2_desc" placeholder="الوصف المقتضب" style="margin-top:5px;">
                     </div>
                     <div class="form-group">
-                        <label>الخيار الثالث (مشكلة تقنية):</label>
-                        <input type="text" value="🛠 | مشكلة تقنية">
+                        <label>الخيار الثالث (اسم - إيموجي - وصف):</label>
+                        <input type="text" id="opt3_label" placeholder="اسم القسم">
+                        <input type="text" id="opt3_emoji" placeholder="الإيموجي" style="margin-top:5px;">
+                        <input type="text" id="opt3_desc" placeholder="الوصف المقتضب" style="margin-top:5px;">
                     </div>
-                    <button type="button" class="btn-save" onclick="saveSettings('${guild.id}')"><i class="fa-solid fa-floppy-disk"></i> حفظ الأقسام</button>
+                    <button type="button" class="btn-save" onclick="saveCategories()"><i class="fa-solid fa-floppy-disk"></i> حفظ الأقسام</button>
                 </div>
 
                 <!-- Tab 4: Command Permissions -->
                 <div id="permissions" class="tab-content">
-                    <h2><i class="fa-solid fa-user-shield" style="color:#eb459e;"></i> الأوامر المدارة وصلاحياتها (-set)</h2>
-                    <p style="color:#949ba4; font-size:13px; margin-bottom:15px;">يمكنك التحكم بالصلاحيات من داخل ديسكورد عبر أمر -set مباشرة.</p>
-                    <div class="cmd-list">
-                        <div class="cmd-item"><span class="cmd-name">-add</span><span>إضافة عضو</span></div>
-                        <div class="cmd-item"><span class="cmd-name">-come</span><span>منشن عضو</span></div>
-                        <div class="cmd-item"><span class="cmd-name">-rename</span><span>تغيير الاسم</span></div>
-                        <div class="cmd-item"><span class="cmd-name">-استلام</span><span>توثيق ونقاط</span></div>
-                        <div class="cmd-item"><span class="cmd-name">-تايم</span><span>تايم أوت</span></div>
-                        <div class="cmd-item"><span class="cmd-name">-تحذير</span><span>تحذير للعضو</span></div>
-                        <div class="cmd-item"><span class="cmd-name">-اغلاق</span><span>إغلاق التكت</span></div>
-                        <div class="cmd-item"><span class="cmd-name">-حذف</span><span>حذف التكت</span></div>
-                        <div class="cmd-item"><span class="cmd-name">-addpoints</span><span>إضافة نقاط</span></div>
-                        <div class="cmd-item"><span class="cmd-name">-removepoints</span><span>خصم نقاط</span></div>
+                    <h2><i class="fa-solid fa-user-shield" style="color:#eb459e;"></i> صلاحيات الأوامر بالرتب (ID الرتبة المسموحة)</h2>
+                    <div class="cmd-grid">
+                        <div class="cmd-card"><label>-add</label><input type="text" id="perm_add" placeholder="ID الرتبة المسموحة"></div>
+                        <div class="cmd-card"><label>-come</label><input type="text" id="perm_come" placeholder="ID الرتبة المسموحة"></div>
+                        <div class="cmd-card"><label>-rename</label><input type="text" id="perm_rename" placeholder="ID الرتبة المسموحة"></div>
+                        <div class="cmd-card"><label>-استلام</label><input type="text" id="perm_claim" placeholder="ID الرتبة المسموحة"></div>
+                        <div class="cmd-card"><label>-تايم</label><input type="text" id="perm_timeout" placeholder="ID الرتبة المسموحة"></div>
+                        <div class="cmd-card"><label>-تحذير</label><input type="text" id="perm_warn" placeholder="ID الرتبة المسموحة"></div>
+                        <div class="cmd-card"><label>-اغلاق</label><input type="text" id="perm_close" placeholder="ID الرتبة المسموحة"></div>
+                        <div class="cmd-card"><label>-حذف</label><input type="text" id="perm_delete" placeholder="ID الرتبة المسموحة"></div>
+                        <div class="cmd-card"><label>-addpoints</label><input type="text" id="perm_addpoints" placeholder="ID الرتبة المسموحة"></div>
+                        <div class="cmd-card"><label>-removepoints</label><input type="text" id="perm_removepoints" placeholder="ID الرتبة المسموحة"></div>
                     </div>
+                    <button type="button" class="btn-save" onclick="savePermissions()"><i class="fa-solid fa-floppy-disk"></i> حفظ الصلاحيات</button>
                 </div>
 
                 <!-- Tab 5: Points & Settings -->
@@ -567,15 +598,23 @@ app.get('/dashboard/:guildId', async (req, res) => {
                     <h2><i class="fa-solid fa-trophy" style="color:#f1c40f;"></i> إعدادات النقاط والمهل الزمنية</h2>
                     <div class="form-grid">
                         <div class="form-group">
-                            <label>عدد النقاط الممنوحة عند الاستلام/التحذير/التايم:</label>
-                            <input type="number" value="1">
+                            <label>نقاط الاستلام (-استلام):</label>
+                            <input type="number" id="claimPoints">
                         </div>
                         <div class="form-group">
-                            <label>مهلة تغيير اسم التكت (-rename Cooldown بالدقائق):</label>
-                            <input type="number" value="10">
+                            <label>نقاط التحذير (-تحذير):</label>
+                            <input type="number" id="warnPoints">
+                        </div>
+                        <div class="form-group">
+                            <label>نقاط التايم أوت (-تايم):</label>
+                            <input type="number" id="timeoutPoints">
+                        </div>
+                        <div class="form-group">
+                            <label>مهلة تغيير اسم التكت (-rename بالدقائق):</label>
+                            <input type="number" id="renameCooldown">
                         </div>
                     </div>
-                    <button type="button" class="btn-save" onclick="saveSettings('${guild.id}')"><i class="fa-solid fa-floppy-disk"></i> حفظ إعدادات النقاط</button>
+                    <button type="button" class="btn-save" onclick="savePoints()"><i class="fa-solid fa-floppy-disk"></i> حفظ إعدادات النقاط والمهل</button>
                 </div>
 
             </div>
@@ -592,10 +631,38 @@ app.get('/dashboard/:guildId', async (req, res) => {
                         if (data.staffRoleId) document.getElementById('staffRoleId').value = data.staffRoleId;
                         if (data.ticketCategoryId) document.getElementById('ticketCategoryId').value = data.ticketCategoryId;
                         if (data.logChannelId) document.getElementById('logChannelId').value = data.logChannelId;
+
                         if (data.panelImage) document.getElementById('panelImage').value = data.panelImage;
                         if (data.ticketImage) document.getElementById('ticketImage').value = data.ticketImage;
                         if (data.panelTitle) document.getElementById('panelTitle').value = data.panelTitle;
                         if (data.panelDescription) document.getElementById('panelDescription').value = data.panelDescription;
+
+                        if (data.claimPoints !== undefined) document.getElementById('claimPoints').value = data.claimPoints;
+                        if (data.warnPoints !== undefined) document.getElementById('warnPoints').value = data.warnPoints;
+                        if (data.timeoutPoints !== undefined) document.getElementById('timeoutPoints').value = data.timeoutPoints;
+                        if (data.renameCooldown !== undefined) document.getElementById('renameCooldown').value = data.renameCooldown;
+
+                        if (data.selectOptions && data.selectOptions.length >= 3) {
+                            document.getElementById('opt1_label').value = data.selectOptions[0].label || '';
+                            document.getElementById('opt1_emoji').value = data.selectOptions[0].emoji || '';
+                            document.getElementById('opt1_desc').value = data.selectOptions[0].description || '';
+
+                            document.getElementById('opt2_label').value = data.selectOptions[1].label || '';
+                            document.getElementById('opt2_emoji').value = data.selectOptions[1].emoji || '';
+                            document.getElementById('opt2_desc').value = data.selectOptions[1].description || '';
+
+                            document.getElementById('opt3_label').value = data.selectOptions[2].label || '';
+                            document.getElementById('opt3_emoji').value = data.selectOptions[2].emoji || '';
+                            document.getElementById('opt3_desc').value = data.selectOptions[2].description || '';
+                        }
+
+                        if (data.commandPermissions) {
+                            const perms = data.commandPermissions;
+                            ['add', 'come', 'rename', 'claim', 'timeout', 'warn', 'close', 'delete', 'addpoints', 'removepoints'].forEach(cmd => {
+                                const el = document.getElementById('perm_' + cmd);
+                                if (el && perms[cmd]) el.value = perms[cmd];
+                            });
+                        }
                     }
                 } catch (e) {
                     console.error('Fetch error:', e);
@@ -616,32 +683,80 @@ app.get('/dashboard/:guildId', async (req, res) => {
                 evt.currentTarget.classList.add("active");
             }
 
-            async function saveSettings(gId) {
-                const payload = {
-                    staffRoleId: document.getElementById('staffRoleId').value.trim(),
-                    ticketCategoryId: document.getElementById('ticketCategoryId').value.trim(),
-                    logChannelId: document.getElementById('logChannelId').value.trim(),
-                    panelImage: document.getElementById('panelImage').value.trim(),
-                    ticketImage: document.getElementById('ticketImage').value.trim(),
-                    panelTitle: document.getElementById('panelTitle').value.trim(),
-                    panelDescription: document.getElementById('panelDescription').value.trim()
-                };
-
+            async function postPayload(payload, msg) {
                 try {
-                    const res = await fetch('/api/settings/' + gId, {
+                    const res = await fetch('/api/settings/' + currentGuildId, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload)
                     });
                     const result = await res.json();
                     if (result.success) {
-                        alert('✅ تم حفظ التعديلات في MongoDB بنجاح! وستنعكس فوراً على البوت.');
+                        alert(msg);
                     } else {
-                        alert('❌ حدث خطأ أثناء الحفظ: ' + (result.error || 'خطأ غير معروف'));
+                        alert('❌ حدث خطأ أثناء الحفظ.');
                     }
                 } catch (err) {
                     alert('❌ تعذر الاتصال بالسيرفر.');
                 }
+            }
+
+            function saveChannels() {
+                postPayload({
+                    staffRoleId: document.getElementById('staffRoleId').value.trim(),
+                    ticketCategoryId: document.getElementById('ticketCategoryId').value.trim(),
+                    logChannelId: document.getElementById('logChannelId').value.trim()
+                }, '✅ تم حفظ إعدادات الرومات والرتب بنجاح!');
+            }
+
+            function saveDesign() {
+                postPayload({
+                    panelImage: document.getElementById('panelImage').value.trim(),
+                    ticketImage: document.getElementById('ticketImage').value.trim(),
+                    panelTitle: document.getElementById('panelTitle').value.trim(),
+                    panelDescription: document.getElementById('panelDescription').value.trim()
+                }, '✅ تم حفظ تصاميم وصور البانل والتكت بنجاح!');
+            }
+
+            function saveCategories() {
+                const selectOptions = [
+                    {
+                        label: document.getElementById('opt1_label').value.trim() || 'استفسار',
+                        value: 'inquiry',
+                        emoji: document.getElementById('opt1_emoji').value.trim() || '❓',
+                        description: document.getElementById('opt1_desc').value.trim() || 'للاستفسارات العامة'
+                    },
+                    {
+                        label: document.getElementById('opt2_label').value.trim() || 'شكوى',
+                        value: 'complaint',
+                        emoji: document.getElementById('opt2_emoji').value.trim() || '⚠️',
+                        description: document.getElementById('opt2_desc').value.trim() || 'تقديم شكوى'
+                    },
+                    {
+                        label: document.getElementById('opt3_label').value.trim() || 'مشكلة تقنية',
+                        value: 'technical',
+                        emoji: document.getElementById('opt3_emoji').value.trim() || '🛠',
+                        description: document.getElementById('opt3_desc').value.trim() || 'المشاكل الفنية'
+                    }
+                ];
+                postPayload({ selectOptions }, '✅ تم حفظ أقسام القائمة المخصصة بنجاح!');
+            }
+
+            function savePermissions() {
+                const commandPermissions = {};
+                ['add', 'come', 'rename', 'claim', 'timeout', 'warn', 'close', 'delete', 'addpoints', 'removepoints'].forEach(cmd => {
+                    commandPermissions[cmd] = document.getElementById('perm_' + cmd).value.trim();
+                });
+                postPayload({ commandPermissions }, '✅ تم حفظ صلاحيات الأوامر بالرتب بنجاح!');
+            }
+
+            function savePoints() {
+                postPayload({
+                    claimPoints: Number(document.getElementById('claimPoints').value) || 1,
+                    warnPoints: Number(document.getElementById('warnPoints').value) || 1,
+                    timeoutPoints: Number(document.getElementById('timeoutPoints').value) || 1,
+                    renameCooldown: Number(document.getElementById('renameCooldown').value) || 10
+                }, '✅ تم حفظ إعدادات النقاط والمهل بنجاح!');
             }
         </script>
     </body>

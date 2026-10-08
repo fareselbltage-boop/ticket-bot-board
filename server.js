@@ -71,10 +71,12 @@ app.set('trust proxy', 1);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// 🔴 منع تخزين الكاش نهائياً لمنع تجمد البيانات في المتصفح والشبكة
 app.use((req, res, next) => {
-    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-    res.set('Pragma', 'no-cache');
-    res.set('Expires', '0');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('Surrogate-Control', 'no-store');
     next();
 });
 
@@ -136,14 +138,12 @@ async function getFreshUserGuilds(req) {
     });
 }
 
-// API لجلب جميع رتب السيرفر الحالية
 app.get('/api/roles/:guildId', async (req, res) => {
     if (!req.session.user) return res.status(401).json({ error: 'غير مصرح' });
     try {
-        const response = await axios.get(`https://discord.com/api/v10/guilds/${req.params.guildId}/roles`, {
+        const response = await axios.get(`https://discord.com/api/v10/guilds/${req.params.guildId}/roles?_t=${Date.now()}`, {
             headers: { Authorization: `Bot ${BOT_TOKEN}` }
         });
-        // استبعاد رتبة @everyone والرتب التي تمتلكها البوتات التلقائية
         const roles = response.data
             .filter(r => r.name !== '@everyone' && !r.managed)
             .map(r => ({ id: r.id, name: r.name, color: r.color }));
@@ -552,7 +552,6 @@ app.get('/dashboard/:guildId', async (req, res) => {
             </div>
 
             <div class="content-panel">
-                <!-- Tab 1: Channels & Roles -->
                 <div id="channels" class="tab-content active">
                     <h2><i class="fa-solid fa-hashtag" style="color:#5865f2;"></i> إعدادات الرومات والرتب الذكية</h2>
                     <div class="form-grid">
@@ -574,7 +573,6 @@ app.get('/dashboard/:guildId', async (req, res) => {
                     <button type="button" class="btn-save" onclick="saveChannels()"><i class="fa-solid fa-floppy-disk"></i> حفظ التغييرات</button>
                 </div>
 
-                <!-- Tab 2: Panel & Ticket Design -->
                 <div id="design" class="tab-content">
                     <h2><i class="fa-solid fa-palette" style="color:#fee75c;"></i> تخصيص نصوص وصور البانل والتكت</h2>
                     <div class="form-group">
@@ -596,7 +594,6 @@ app.get('/dashboard/:guildId', async (req, res) => {
                     <button type="button" class="btn-save" onclick="saveDesign()"><i class="fa-solid fa-floppy-disk"></i> حفظ التصميم</button>
                 </div>
 
-                <!-- Tab 3: Select Menu Categories -->
                 <div id="categories" class="tab-content">
                     <h2><i class="fa-solid fa-list-check" style="color:#23a55a;"></i> تخصيص خيارات قائمة فتح التكتات</h2>
                     <div class="form-group">
@@ -620,7 +617,6 @@ app.get('/dashboard/:guildId', async (req, res) => {
                     <button type="button" class="btn-save" onclick="saveCategories()"><i class="fa-solid fa-floppy-disk"></i> حفظ الأقسام</button>
                 </div>
 
-                <!-- Tab 4: Custom Command Names & Prefix -->
                 <div id="cmdnames" class="tab-content">
                     <h2><i class="fa-solid fa-terminal" style="color:#3498db;"></i> تخصيص أسماء الأوامر والبادئة (Prefix)</h2>
                     <div class="form-group">
@@ -643,7 +639,6 @@ app.get('/dashboard/:guildId', async (req, res) => {
                     <button type="button" class="btn-save" onclick="saveAliases()"><i class="fa-solid fa-floppy-disk"></i> حفظ أسماء الأوامر</button>
                 </div>
 
-                <!-- Tab 5: Command Permissions with Server Roles Dropdowns -->
                 <div id="permissions" class="tab-content">
                     <h2><i class="fa-solid fa-user-shield" style="color:#eb459e;"></i> صلاحيات الأوامر بالرتب (اختر من رتب السيرفر)</h2>
                     <div class="cmd-grid">
@@ -661,7 +656,6 @@ app.get('/dashboard/:guildId', async (req, res) => {
                     <button type="button" class="btn-save" onclick="savePermissions()"><i class="fa-solid fa-floppy-disk"></i> حفظ الصلاحيات</button>
                 </div>
 
-                <!-- Tab 6: Points & Settings -->
                 <div id="points" class="tab-content">
                     <h2><i class="fa-solid fa-trophy" style="color:#f1c40f;"></i> إعدادات النقاط والمهل الزمنية</h2>
                     <div class="form-grid">
@@ -692,9 +686,10 @@ app.get('/dashboard/:guildId', async (req, res) => {
             const currentGuildId = "${guild.id}";
             let serverRoles = [];
 
+            // 🔴 إضافة كاسر الكاش بـ Timestamp لمنع تخزين البيانات بالمتصفح
             async function loadRoles() {
                 try {
-                    const res = await fetch('/api/roles/' + currentGuildId);
+                    const res = await fetch('/api/roles/' + currentGuildId + '?_t=' + Date.now());
                     serverRoles = await res.json();
 
                     const selects = document.querySelectorAll('.role-select');
@@ -720,7 +715,7 @@ app.get('/dashboard/:guildId', async (req, res) => {
                 await loadRoles();
 
                 try {
-                    const res = await fetch('/api/settings/' + currentGuildId);
+                    const res = await fetch('/api/settings/' + currentGuildId + '?_t=' + Date.now());
                     const data = await res.json();
                     if (data && !data.error) {
                         if (data.prefix) document.getElementById('prefix').value = data.prefix;
@@ -789,7 +784,7 @@ app.get('/dashboard/:guildId', async (req, res) => {
 
             async function postPayload(payload, msg) {
                 try {
-                    const res = await fetch('/api/settings/' + currentGuildId, {
+                    const res = await fetch('/api/settings/' + currentGuildId + '?_t=' + Date.now(), {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload)

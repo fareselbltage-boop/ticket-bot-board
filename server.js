@@ -22,7 +22,7 @@ if (MONGO_URI) {
         .catch(err => console.error('MongoDB Error:', err));
 }
 
-// موديل GuildSettings مضافاً إليه إعدادات الحالة (Status & Activity) للبوت
+// موديل GuildSettings
 const GuildSettings = mongoose.models.GuildSettings || mongoose.model('GuildSettings', new mongoose.Schema({
   guildId: { type: String, required: true, unique: true },
   prefix: { type: String, default: '-' },
@@ -34,11 +34,10 @@ const GuildSettings = mongoose.models.GuildSettings || mongoose.model('GuildSett
   panelTitle: { type: String, default: '🎫 LIGHT Support | الدعم الفني' },
   panelDescription: { type: String, default: 'مرحباً بك في نظام الدعم الفني الخاص بسيرفر LIGHT.' },
   
-  // إعدادات حالة البوت (Bot Presence & Status)
   botName: { type: String, default: 'Light Ticket Bot' },
   botAvatar: { type: String, default: 'https://i.postimg.cc/tJW3r0PJ/Screenshot-20261001-232609-ibis-Paint-X.jpg' },
-  botStatus: { type: String, default: 'online' }, // online, idle, dnd, invisible
-  activityType: { type: Number, default: 0 }, // 0: Playing, 2: Listening, 3: Watching, 5: Competing
+  botStatus: { type: String, default: 'online' },
+  activityType: { type: Number, default: 0 },
   activityText: { type: String, default: '-help / التذاكر' },
 
   claimPoints: { type: Number, default: 1 },
@@ -79,6 +78,7 @@ app.set('trust proxy', 1);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// منع التخزين المؤقت نهائياً (No-Cache Headers)
 app.use((req, res, next) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
     res.setHeader('Pragma', 'no-cache');
@@ -89,7 +89,7 @@ app.use((req, res, next) => {
 
 app.use(session({
     secret: process.env.SESSION_SECRET || 'secret-key-empire-12345',
-    resave: false,
+    resave: true,
     saveUninitialized: false,
     store: MongoStore.create({
         mongoUrl: MONGO_URI || 'mongodb://localhost:27017/ticketbot',
@@ -138,11 +138,14 @@ async function getFreshUserGuilds(req) {
         console.error('Bot Guilds Fetch Error:', botErr.response ? botErr.response.data : botErr.message);
     }
 
-    return userGuildsResponse.data.filter(g => {
+    const filtered = userGuildsResponse.data.filter(g => {
         const isManager = (parseInt(g.permissions) & 0x8) === 0x8 || (parseInt(g.permissions) & 0x20) === 0x20;
         const botInGuild = botGuildIds.has(String(g.id));
         return isManager && botInGuild;
     });
+
+    req.session.guilds = filtered;
+    return filtered;
 }
 
 app.get('/api/roles/:guildId', async (req, res) => {
@@ -188,6 +191,13 @@ app.post('/api/settings/:guildId', async (req, res) => {
             { upsert: true, new: true, setDefaultsOnInsert: true }
         );
 
+        if (req.session.guilds && Array.isArray(req.session.guilds)) {
+            const gIndex = req.session.guilds.findIndex(g => String(g.id) === guildId);
+            if (gIndex !== -1 && updateData.botName) {
+                req.session.guilds[gIndex].name = updateData.botName;
+            }
+        }
+
         return res.json({ success: true, settings: updated });
     } catch (err) {
         console.error('Save Settings Error:', err);
@@ -225,6 +235,8 @@ app.get('/api/auth/callback', async (req, res) => {
         req.session.accessToken = accessToken;
         req.session.refreshToken = refreshToken;
         req.session.user = userResponse.data;
+
+        await getFreshUserGuilds(req);
 
         res.redirect('/dashboard');
     } catch (error) {
@@ -276,7 +288,6 @@ app.get('/dashboard', async (req, res) => {
     let guilds = [];
     try {
         guilds = await getFreshUserGuilds(req);
-        req.session.guilds = guilds;
     } catch (e) {
         guilds = req.session.guilds || [];
     }
@@ -347,7 +358,14 @@ app.get('/dashboard', async (req, res) => {
 app.get('/dashboard/:guildId', async (req, res) => {
     if (!req.session.user) return res.redirect('/login');
     const guildId = String(req.params.guildId);
-    let guilds = req.session.guilds || [];
+    
+    let guilds = [];
+    try {
+        guilds = await getFreshUserGuilds(req);
+    } catch (e) {
+        guilds = req.session.guilds || [];
+    }
+
     const guild = guilds.find(g => String(g.id) === guildId);
     if (!guild) return res.send('❌ لا تملك صلاحيات لإدارة هذا السيرفر.');
 
@@ -357,7 +375,7 @@ app.get('/dashboard/:guildId', async (req, res) => {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>إعدادات ${guild.name} \vert{}${BOT_NAME}</title>
+        <title>إعدادات ${guild.name} | ${BOT_NAME}</title>
         <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
         <style>
@@ -400,7 +418,6 @@ app.get('/dashboard/:guildId', async (req, res) => {
                 <button class="tab-btn" onclick="openTab(event, 'points')"><i class="fa-solid fa-trophy"></i> إعدادات النقاط</button>
             </div>
             <div class="content-panel">
-                <!-- قسم إعدادات البوت الجديد -->
                 <div id="botsettings" class="tab-content active">
                     <h2><i class="fa-solid fa-robot" style="color:#5865f2;"></i> إعدادات حالة واسم وصورة البوت</h2>
                     <div class="form-grid">
@@ -425,13 +442,11 @@ app.get('/dashboard/:guildId', async (req, res) => {
                             </select>
                         </div>
                         <div class="form-group" style="grid-column: 1 / -1;">
-                            <label>نص النشاط / الحالة (Activity Text):</label>
-                            <input type="text" id="activityText" placeholder="مثال: -help | نظام التذاكر">
+                            <label>نص النشاط / الحالة (Activity Text):</label><input type="text" id="activityText">
                         </div>
                     </div>
-                    <button type="button" class="btn-save" onclick="saveBotSettings()"><i class="fa-solid fa-floppy-disk"></i> حفظ إعدادات البوت</button>
+                    <button type="button" class="btn-save" onclick="saveBotSettings()">حفظ إعدادات البوت</button>
                 </div>
-
                 <div id="channels" class="tab-content">
                     <h2>إعدادات الرومات والرتب الذكية</h2>
                     <div class="form-grid">
@@ -538,11 +553,12 @@ app.get('/dashboard/:guildId', async (req, res) => {
                     const res = await fetch('/api/settings/' + currentGuildId + '?_t=' + Date.now());
                     const data = await res.json();
                     if (data && !data.error) {
-                        if (data.botName) document.getElementById('botName').value = data.botName;
-                        if (data.botAvatar) document.getElementById('botAvatar').value = data.botAvatar;
-                        if (data.botStatus) document.getElementById('botStatus').value = data.botStatus;
+                        // تعبئة حقول إعدادات البوت تلقائياً عند أي فتح أو Refresh
+                        if (data.botName !== undefined) document.getElementById('botName').value = data.botName;
+                        if (data.botAvatar !== undefined) document.getElementById('botAvatar').value = data.botAvatar;
+                        if (data.botStatus !== undefined) document.getElementById('botStatus').value = data.botStatus;
                         if (data.activityType !== undefined) document.getElementById('activityType').value = data.activityType;
-                        if (data.activityText) document.getElementById('activityText').value = data.activityText;
+                        if (data.activityText !== undefined) document.getElementById('activityText').value = data.activityText;
 
                         if (data.prefix) document.getElementById('prefix').value = data.prefix;
                         if (data.staffRoleId) document.getElementById('staffRoleId').value = data.staffRoleId;

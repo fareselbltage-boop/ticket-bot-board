@@ -3,6 +3,7 @@ const express = require('express');
 const session = require('express-session');
 const MongoStore = require('connect-mongo');
 const axios = require('axios');
+const mongoose = require('mongoose');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -12,6 +13,23 @@ const MONGO_URI = process.env.MONGO_URI;
 
 const BOT_NAME = process.env.BOT_NAME || 'Empire Ticket Bot';
 const BOT_AVATAR = process.env.BOT_AVATAR || 'https://i.postimg.cc/8P2L5vX4/1000020307.jpg';
+
+// الاتصال بـ MongoDB
+if (MONGO_URI) {
+    mongoose.connect(MONGO_URI).then(() => console.log('MongoDB Connected in Dashboard')).catch(err => console.error('MongoDB Error:', err));
+}
+
+// تعريف موديل GuildSettings للمزامنة مع البوت
+const GuildSettings = mongoose.models.GuildSettings || mongoose.model('GuildSettings', new mongoose.Schema({
+  guildId: { type: String, required: true, unique: true },
+  staffRoleId: { type: String, default: '1555478928708337775' },
+  ticketCategoryId: { type: String, default: '1555176022352208012' },
+  logChannelId: { type: String, default: '1555488444182962216' },
+  panelImage: { type: String, default: 'https://i.postimg.cc/j5x6JgQH/Untitled900-20260927182744.jpg' },
+  ticketImage: { type: String, default: 'https://i.postimg.cc/j5x6JgQH/Untitled900-20260927182744.jpg' },
+  panelTitle: { type: String, default: '🎫 LIGHT Support | الدعم الفني' },
+  panelDescription: { type: String, default: 'مرحباً بك في نظام الدعم الفني الخاص بسيرفر LIGHT.\n\nاضغط على الزر بالأسفل لفتح تذكرة وتواصل مع فريق الدعم.' }
+}, { timestamps: true }));
 
 // السماح بالعمل عبر Proxy الخاص بـ Vercel لضمان استقرار وتأكيد الـ Cookies
 app.set('trust proxy', 1);
@@ -34,13 +52,43 @@ app.use(session({
 
 app.use(express.json());
 
+// API لحفظ واسترجاع إعدادات السيرفر
+app.get('/api/settings/:guildId', async (req, res) => {
+    if (!req.session.user) return res.status(401).json({ error: 'غير مصرح' });
+    try {
+        let settings = await GuildSettings.findOne({ guildId: req.params.guildId });
+        if (!settings) {
+            settings = await GuildSettings.create({ guildId: req.params.guildId });
+        }
+        res.json(settings);
+    } catch (err) {
+        res.status(500).json({ error: 'حدث خطأ أثناء جلب الإعدادات' });
+    }
+});
+
+app.post('/api/settings/:guildId', async (req, res) => {
+    if (!req.session.user) return res.status(401).json({ error: 'غير مصرح' });
+
+    try {
+        const updated = await GuildSettings.findOneAndUpdate(
+            { guildId: req.params.guildId },
+            { $set: req.body },
+            { upsert: true, new: true }
+        );
+        res.json({ success: true, settings: updated });
+    } catch (err) {
+        console.error('Save Settings Error:', err);
+        res.status(500).json({ error: 'حدث خطأ أثناء حفظ الإعدادات' });
+    }
+});
+
 // رابط تسجيل الدخول عبر ديسكورد
 app.get('/login', (req, res) => {
     const discordAuthUrl = `https://discord.com/api/oauth2/authorize?client_id=${process.env.CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=identify%20guilds`;
     res.redirect(discordAuthUrl);
 });
 
-// استقبال العودة من ديسكورد
+// استقبال العودة من ديسكورد وتصفية السيرفرات (إظهار فقط السيرفرات الموجد بها البوت)
 app.get('/api/auth/callback', async (req, res) => {
     const code = req.query.code;
     if (!code) return res.send('لم يتم استقبال كود التحقق من ديسكورد.');
@@ -58,16 +106,31 @@ app.get('/api/auth/callback', async (req, res) => {
 
         const accessToken = tokenResponse.data.access_token;
 
+        // جلب بيانات المستخدم
         const userResponse = await axios.get('https://discord.com/api/users/@me', {
             headers: { Authorization: `Bearer ${accessToken}` }
         });
 
-        const guildsResponse = await axios.get('https://discord.com/api/users/@me/guilds', {
+        // جلب سيرفرات المستخدم
+        const userGuildsResponse = await axios.get('https://discord.com/api/users/@me/guilds', {
             headers: { Authorization: `Bearer ${accessToken}` }
         });
 
+        // جلب سيرفرات البوت الحالية
+        const botGuildsResponse = await axios.get('https://discord.com/api/users/@me/guilds', {
+            headers: { Authorization: `Bot ${process.env.TOKEN}` }
+        });
+
+        const botGuildIds = new Set(botGuildsResponse.data.map(g => g.id));
+
+        // فلترة سيرفرات المستخدم: أن يكون مسؤولاً (Administrator أو Manage Server) + أن يكون البوت متواجداً بالسيرفر
+        const adminGuilds = userGuildsResponse.data.filter(g => 
+            ((parseInt(g.permissions) & 0x8) === 0x8 || (parseInt(g.permissions) & 0x20) === 0x20) &&
+            botGuildIds.has(g.id)
+        );
+
         req.session.user = userResponse.data;
-        req.session.guilds = guildsResponse.data.filter(g => (parseInt(g.permissions) & 0x8) === 0x8 || (parseInt(g.permissions) & 0x20) === 0x20);
+        req.session.guilds = adminGuilds;
 
         res.redirect('/dashboard');
     } catch (error) {
@@ -76,7 +139,7 @@ app.get('/api/auth/callback', async (req, res) => {
     }
 });
 
-// الصفحة الرئيسية (تحويل تلقائي إلى Dashboard إذا كان مسجلاً)
+// الصفحة الرئيسية
 app.get('/', (req, res) => {
     if (req.session.user) return res.redirect('/dashboard');
 
@@ -213,31 +276,42 @@ app.get('/dashboard', (req, res) => {
     if (!req.session.user) return res.redirect('/login');
 
     const user = req.session.user;
-    const guilds = req.session.guilds;
+    const guilds = req.session.guilds || [];
 
     const userAvatar = user.avatar 
         ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png`
         : `https://cdn.discordapp.com/embed/avatars/0.png`;
 
     let guildsCardsHtml = '';
-    guilds.forEach(guild => {
-        const guildIcon = guild.icon 
-            ? `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png`
-            : `https://cdn.discordapp.com/embed/avatars/1.png`;
 
-        guildsCardsHtml += `
-            <div class="guild-card">
-                <img src="${guildIcon}" class="guild-icon" alt="${guild.name}">
-                <div class="guild-info">
-                    <div class="guild-name">${guild.name}</div>
-                    <div class="guild-id">ID: ${guild.id}</div>
-                </div>
-                <a href="/dashboard/${guild.id}" class="btn-manage">
-                    <i class="fa-solid fa-gear"></i> إعدادات البوت
-                </a>
+    if (guilds.length === 0) {
+        guildsCardsHtml = `
+            <div style="grid-column: 1 / -1; text-align: center; padding: 40px; background: #181e29; border-radius: 16px; border: 1px solid rgba(255,255,255,0.07);">
+                <i class="fa-solid fa-circle-exclamation" style="font-size: 40px; color: #fee75c; margin-bottom: 15px;"></i>
+                <h3 style="margin-bottom: 10px;">لا توجد سيرفرات متاحة</h3>
+                <p style="color: #949ba4;">تأكد من أنك تمتلك صلاحية إدارة بسيرفر يتواجد به البوت حالياً.</p>
             </div>
         `;
-    });
+    } else {
+        guilds.forEach(guild => {
+            const guildIcon = guild.icon 
+                ? `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png`
+                : `https://cdn.discordapp.com/embed/avatars/1.png`;
+
+            guildsCardsHtml += `
+                <div class="guild-card">
+                    <img src="${guildIcon}" class="guild-icon" alt="${guild.name}">
+                    <div class="guild-info">
+                        <div class="guild-name">${guild.name}</div>
+                        <div class="guild-id">ID: ${guild.id}</div>
+                    </div>
+                    <a href="/dashboard/${guild.id}" class="btn-manage">
+                        <i class="fa-solid fa-gear"></i> إعدادات البوت
+                    </a>
+                </div>
+            `;
+        });
+    }
 
     const html = `
     <!DOCTYPE html>
@@ -343,14 +417,14 @@ app.get('/dashboard', (req, res) => {
 });
 
 // صفحة الإعدادات الشاملة للسيرفر
-app.get('/dashboard/:guildId', (req, res) => {
+app.get('/dashboard/:guildId', async (req, res) => {
     if (!req.session.user) return res.redirect('/login');
 
     const guildId = req.params.guildId;
-    const guild = req.session.guilds.find(g => g.id === guildId);
+    const guild = (req.session.guilds || []).find(g => g.id === guildId);
 
     if (!guild) {
-        return res.send('لا تملك صلاحيات لإدارة هذا السيرفر أو أن السيرفر غير موجود.');
+        return res.send('لا تملك صلاحيات لإدارة هذا السيرفر أو أن البوت غير موجود به.');
     }
 
     const html = `
@@ -488,46 +562,46 @@ app.get('/dashboard/:guildId', (req, res) => {
                 <!-- Tab 1: Channels & Roles -->
                 <div id="channels" class="tab-content active">
                     <h2><i class="fa-solid fa-hashtag" style="color:#5865f2;"></i> إعدادات الرومات والرتب الذكية</h2>
-                    <form>
+                    <form id="form-channels">
                         <div class="form-grid">
                             <div class="form-group">
                                 <label>رتبة الإدارة الرئيسية (STAFF_ROLE_ID):</label>
-                                <input type="text" value="1555478928708337775" placeholder="أدخل ID الرتبة">
+                                <input type="text" id="staffRoleId" placeholder="أدخل ID الرتبة">
                             </div>
                             <div class="form-group">
                                 <label>كاتيجوري التكتات (TICKET_CATEGORY_ID):</label>
-                                <input type="text" value="1555176022352208012" placeholder="أدخل ID الكاتيجوري">
+                                <input type="text" id="ticketCategoryId" placeholder="أدخل ID الكاتيجوري">
                             </div>
                             <div class="form-group">
                                 <label>روم السجلات (LOG_CHANNEL_ID):</label>
-                                <input type="text" value="1555488444182962216" placeholder="أدخل ID الروم">
+                                <input type="text" id="logChannelId" placeholder="أدخل ID الروم">
                             </div>
                         </div>
-                        <button type="button" class="btn-save" onclick="saveAlert()"><i class="fa-solid fa-floppy-disk"></i> حفظ التغييرات</button>
+                        <button type="button" class="btn-save" onclick="saveSettings('${guild.id}')"><i class="fa-solid fa-floppy-disk"></i> حفظ التغييرات</button>
                     </form>
                 </div>
 
                 <!-- Tab 2: Panel & Ticket Design -->
                 <div id="design" class="tab-content">
                     <h2><i class="fa-solid fa-palette" style="color:#fee75c;"></i> تخصيص نصوص وصور البانل والتكت</h2>
-                    <form>
+                    <form id="form-design">
                         <div class="form-group">
                             <label>رابط صورة البانل الخارجي (PANEL_IMAGE):</label>
-                            <input type="text" value="https://i.postimg.cc/j5x6JgQH/Untitled900-20260927182744.jpg">
+                            <input type="text" id="panelImage">
                         </div>
                         <div class="form-group">
                             <label>رابط صورة التكت الداخلي (TICKET_IMAGE):</label>
-                            <input type="text" value="https://i.postimg.cc/j5x6JgQH/Untitled900-20260927182744.jpg">
+                            <input type="text" id="ticketImage">
                         </div>
                         <div class="form-group">
                             <label>عنوان رسالة البانل (-panel):</label>
-                            <input type="text" value="🎫 LIGHT Support | الدعم الفني">
+                            <input type="text" id="panelTitle">
                         </div>
                         <div class="form-group">
                             <label>نص رسالة البانل الخارجي:</label>
-                            <textarea rows="3">مرحباً بك في نظام الدعم الفني الخاص بسيرفر LIGHT.\n\nاضغط على الزر بالأسفل لفتح تذكرة وتواصل مع فريق الدعم.</textarea>
+                            <textarea id="panelDescription" rows="3"></textarea>
                         </div>
-                        <button type="button" class="btn-save" onclick="saveAlert()"><i class="fa-solid fa-floppy-disk"></i> حفظ التصميم</button>
+                        <button type="button" class="btn-save" onclick="saveSettings('${guild.id}')"><i class="fa-solid fa-floppy-disk"></i> حفظ التصميم</button>
                     </form>
                 </div>
 
@@ -547,7 +621,7 @@ app.get('/dashboard/:guildId', (req, res) => {
                             <label>الخيار الثالث (مشكلة تقنية):</label>
                             <input type="text" value="🛠 | مشكلة تقنية">
                         </div>
-                        <button type="button" class="btn-save" onclick="saveAlert()"><i class="fa-solid fa-floppy-disk"></i> حفظ الأقسام</button>
+                        <button type="button" class="btn-save" onclick="saveSettings('${guild.id}')"><i class="fa-solid fa-floppy-disk"></i> حفظ الأقسام</button>
                     </form>
                 </div>
 
@@ -583,7 +657,7 @@ app.get('/dashboard/:guildId', (req, res) => {
                                 <input type="number" value="10">
                             </div>
                         </div>
-                        <button type="button" class="btn-save" onclick="saveAlert()"><i class="fa-solid fa-floppy-disk"></i> حفظ إعدادات النقاط</button>
+                        <button type="button" class="btn-save" onclick="saveSettings('${guild.id}')"><i class="fa-solid fa-floppy-disk"></i> حفظ إعدادات النقاط</button>
                     </form>
                 </div>
 
@@ -591,6 +665,27 @@ app.get('/dashboard/:guildId', (req, res) => {
         </div>
 
         <script>
+            const guildId = "${guild.id}";
+
+            // جلب البيانات المخزنة وتعبئتها تلقائياً عند فتح الصفحة
+            window.onload = async function() {
+                try {
+                    const res = await fetch('/api/settings/' + guildId);
+                    const data = await res.json();
+                    if (data) {
+                        if (data.staffRoleId) document.getElementById('staffRoleId').value = data.staffRoleId;
+                        if (data.ticketCategoryId) document.getElementById('ticketCategoryId').value = data.ticketCategoryId;
+                        if (data.logChannelId) document.getElementById('logChannelId').value = data.logChannelId;
+                        if (data.panelImage) document.getElementById('panelImage').value = data.panelImage;
+                        if (data.ticketImage) document.getElementById('ticketImage').value = data.ticketImage;
+                        if (data.panelTitle) document.getElementById('panelTitle').value = data.panelTitle;
+                        if (data.panelDescription) document.getElementById('panelDescription').value = data.panelDescription;
+                    }
+                } catch (e) {
+                    console.error(e);
+                }
+            };
+
             function openTab(evt, tabName) {
                 var i, tabcontent, tablinks;
                 tabcontent = document.getElementsByClassName("tab-content");
@@ -605,8 +700,32 @@ app.get('/dashboard/:guildId', (req, res) => {
                 evt.currentTarget.classList.add("active");
             }
 
-            function saveAlert() {
-                alert('تم التجهيز بنجاح! سنربط حفظ هذه الإعدادات الآن بقاعدة البيانات MongoDB لتقوم بتنفيذها وتحديث البوت فوراً.');
+            async function saveSettings(gId) {
+                const payload = {
+                    staffRoleId: document.getElementById('staffRoleId').value,
+                    ticketCategoryId: document.getElementById('ticketCategoryId').value,
+                    logChannelId: document.getElementById('logChannelId').value,
+                    panelImage: document.getElementById('panelImage').value,
+                    ticketImage: document.getElementById('ticketImage').value,
+                    panelTitle: document.getElementById('panelTitle').value,
+                    panelDescription: document.getElementById('panelDescription').value
+                };
+
+                try {
+                    const res = await fetch('/api/settings/' + gId, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    const result = await res.json();
+                    if (result.success) {
+                        alert('✅ تم حفظ التعديلات في قاعدة البيانات وتحديث البوت بنجاح!');
+                    } else {
+                        alert('❌ حدث خطأ أثناء الحفظ.');
+                    }
+                } catch (err) {
+                    alert('❌ تعذر الاتصال بالسيرفر.');
+                }
             }
         </script>
     </body>

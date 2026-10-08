@@ -197,7 +197,7 @@ app.get('/api/auth/callback', async (req, res) => {
     }
 });
 
-// الصفحة الرئيسية مع إعدادات المعاينة الفخمة
+// الصفحة الرئيسية مع OpenGraph الشامل لجميع المنصات
 app.get('/', (req, res) => {
     const html = `
     <!DOCTYPE html>
@@ -207,11 +207,23 @@ app.get('/', (req, res) => {
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>${BOT_NAME} - لوحة التحكم الاحترافية</title>
 
-        <!-- Open Graph Meta Tags -->
+        <!-- Open Graph / Discord Embed Metadata -->
+        <meta property="og:type" content="website">
+        <meta property="og:url" content="https://ticket-bot-board.vercel.app/">
         <meta property="og:title" content="${BOT_NAME} - لوحة التحكم الرسمية">
         <meta property="og:description" content="قم بإدارة وتخصيص كافة إعدادات البوت، الأقسام، والصلاحيات بسهولة عبر لوحة التحكم الرسمية.">
         <meta property="og:image" content="${BOT_AVATAR}">
-        <meta property="og:type" content="website">
+        <meta property="og:image:secure_url" content="${BOT_AVATAR}">
+        <meta property="og:image:type" content="image/jpeg">
+        <meta property="og:image:width" content="1200">
+        <meta property="og:image:height" content="630">
+
+        <!-- Twitter Card Embed -->
+        <meta name="twitter:card" content="summary_large_image">
+        <meta name="twitter:title" content="${BOT_NAME} - لوحة التحكم الرسمية">
+        <meta name="twitter:description" content="قم بإدارة وتخصيص كافة إعدادات البوت، الأقسام، والصلاحيات بسهولة عبر لوحة التحكم الرسمية.">
+        <meta name="twitter:image" content="${BOT_AVATAR}">
+
         <meta name="theme-color" content="#5865F2">
 
         <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -359,10 +371,12 @@ app.get('/dashboard', async (req, res) => {
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>لوحة التحكم | ${BOT_NAME}</title>
 
-        <!-- Open Graph Meta Tags -->
+        <meta property="og:type" content="website">
         <meta property="og:title" content="${BOT_NAME} - قائمة السيرفرات">
         <meta property="og:description" content="قم بضبط وتعديل خيارات وإعدادات البوت بالسيرفر الخاص بك.">
         <meta property="og:image" content="${BOT_AVATAR}">
+        <meta property="og:image:secure_url" content="${BOT_AVATAR}">
+        <meta name="twitter:card" content="summary_large_image">
         <meta name="theme-color" content="#5865F2">
 
         <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -447,9 +461,12 @@ app.get('/dashboard/:guildId', async (req, res) => {
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>إعدادات ${guild.name} | ${BOT_NAME}</title>
 
+        <meta property="og:type" content="website">
         <meta property="og:title" content="${BOT_NAME} - إعدادات السيرفر">
         <meta property="og:description" content="إدارة إعدادات وتخصيصات ${guild.name}.">
         <meta property="og:image" content="${BOT_AVATAR}">
+        <meta property="og:image:secure_url" content="${BOT_AVATAR}">
+        <meta name="twitter:card" content="summary_large_image">
         <meta name="theme-color" content="#5865F2">
 
         <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">

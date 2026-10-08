@@ -40,6 +40,14 @@ app.set('trust proxy', 1);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// منع المتصفح والسيرفر من تخزين الصفحات كـ Cache لضمان ظهور أي تحديث فوراً عند الـ Refresh
+app.use((req, res, next) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+    next();
+});
+
 // إعداد الجلسة
 app.use(session({
     secret: process.env.SESSION_SECRET || 'secret-key-empire-12345',
@@ -56,15 +64,36 @@ app.use(session({
     }
 }));
 
-// دالة مساعدة لتحديث سيرفرات المستخدم المقترنة بالبوت مباشرة من ديسكورد
-async function fetchAndFilterGuilds(accessToken) {
-    const userGuildsResponse = await axios.get('https://discord.com/api/users/@me/guilds', {
+// دالة تجديد التوكن وجلب قائمة السيرفرات الحية لحظياً
+async function getFreshUserGuilds(req) {
+    let accessToken = req.session.accessToken;
+
+    if (req.session.refreshToken) {
+        try {
+            const refreshRes = await axios.post('https://discord.com/api/oauth2/token', new URLSearchParams({
+                client_id: process.env.CLIENT_ID,
+                client_secret: process.env.CLIENT_SECRET,
+                grant_type: 'refresh_token',
+                refresh_token: req.session.refreshToken,
+            }), {
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+            });
+
+            accessToken = refreshRes.data.access_token;
+            req.session.accessToken = accessToken;
+            req.session.refreshToken = refreshRes.data.refresh_token;
+        } catch (e) {
+            console.log('Refresh token attempt failed, using existing access token.');
+        }
+    }
+
+    const userGuildsResponse = await axios.get(`https://discord.com/api/users/@me/guilds?_t=${Date.now()}`, {
         headers: { Authorization: `Bearer ${accessToken}` }
     });
 
     let botGuildIds = new Set();
     try {
-        const botGuildsResponse = await axios.get('https://discord.com/api/users/@me/guilds?limit=200', {
+        const botGuildsResponse = await axios.get(`https://discord.com/api/users/@me/guilds?limit=200&_t=${Date.now()}`, {
             headers: { Authorization: `Bot ${BOT_TOKEN}` }
         });
         botGuildIds = new Set(botGuildsResponse.data.map(g => String(g.id)));
@@ -129,7 +158,7 @@ app.get('/login', (req, res) => {
     res.redirect(discordAuthUrl);
 });
 
-// استقبال العودة
+// استقبال العودة من ديسكورد
 app.get('/api/auth/callback', async (req, res) => {
     const code = req.query.code;
     if (!code) return res.send('لم يتم استقبال كود التحقق من ديسكورد.');
@@ -146,12 +175,14 @@ app.get('/api/auth/callback', async (req, res) => {
         });
 
         const accessToken = tokenResponse.data.access_token;
+        const refreshToken = tokenResponse.data.refresh_token;
 
         const userResponse = await axios.get('https://discord.com/api/users/@me', {
             headers: { Authorization: `Bearer ${accessToken}` }
         });
 
         req.session.accessToken = accessToken;
+        req.session.refreshToken = refreshToken;
         req.session.user = userResponse.data;
 
         res.redirect('/dashboard');
@@ -161,10 +192,8 @@ app.get('/api/auth/callback', async (req, res) => {
     }
 });
 
-// الصفحة الرئيسية
+// الصفحة الرئيسية (لوحة تسجيل الدخول)
 app.get('/', (req, res) => {
-    if (req.session.user) return res.redirect('/dashboard');
-
     const html = `
     <!DOCTYPE html>
     <html lang="ar" dir="rtl">
@@ -251,7 +280,9 @@ app.get('/', (req, res) => {
             <img src="${BOT_AVATAR}" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'" alt="Bot Avatar" class="bot-avatar">
             <h1>${BOT_NAME}</h1>
             <p>مرحباً بك! يرجى تسجيل الدخول بحساب ديسكورد لإدارة واستعراض سيرفراتك.</p>
-            <a href="/login" class="btn-login"><i class="fa-brands fa-discord"></i> تسجيل الدخول بواسطة Discord</a>
+            <a href="${req.session.user ? '/dashboard' : '/login'}" class="btn-login">
+                <i class="fa-brands fa-discord"></i> ${req.session.user ? 'الانتقال للوحة التحكم' : 'تسجيل الدخول بواسطة Discord'}
+            </a>
         </div>
     </body>
     </html>
@@ -264,14 +295,12 @@ app.get('/dashboard', async (req, res) => {
     if (!req.session.user) return res.redirect('/login');
 
     let guilds = [];
-    if (req.session.accessToken) {
-        try {
-            guilds = await fetchAndFilterGuilds(req.session.accessToken);
-            req.session.guilds = guilds;
-        } catch (e) {
-            console.error('Refresh Guilds Error:', e.message);
-            guilds = req.session.guilds || [];
-        }
+    try {
+        guilds = await getFreshUserGuilds(req);
+        req.session.guilds = guilds;
+    } catch (e) {
+        console.error('Refresh Guilds Error:', e.message);
+        guilds = req.session.guilds || [];
     }
 
     const user = req.session.user;
@@ -378,13 +407,11 @@ app.get('/dashboard/:guildId', async (req, res) => {
     const guildId = String(req.params.guildId);
     
     let guilds = [];
-    if (req.session.accessToken) {
-        try {
-            guilds = await fetchAndFilterGuilds(req.session.accessToken);
-            req.session.guilds = guilds;
-        } catch (e) {
-            guilds = req.session.guilds || [];
-        }
+    try {
+        guilds = await getFreshUserGuilds(req);
+        req.session.guilds = guilds;
+    } catch (e) {
+        guilds = req.session.guilds || [];
     }
 
     const guild = guilds.find(g => String(g.id) === guildId);

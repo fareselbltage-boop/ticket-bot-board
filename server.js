@@ -22,7 +22,7 @@ if (MONGO_URI) {
         .catch(err => console.error('MongoDB Error:', err));
 }
 
-// موديل GuildSettings مع القيم الأصلية ودعم عدة رتب للصلاحيات (Array of Strings)
+// موديل GuildSettings مضافاً إليه إعدادات الحالة (Status & Activity) للبوت
 const GuildSettings = mongoose.models.GuildSettings || mongoose.model('GuildSettings', new mongoose.Schema({
   guildId: { type: String, required: true, unique: true },
   prefix: { type: String, default: '-' },
@@ -34,6 +34,13 @@ const GuildSettings = mongoose.models.GuildSettings || mongoose.model('GuildSett
   panelTitle: { type: String, default: '🎫 LIGHT Support | الدعم الفني' },
   panelDescription: { type: String, default: 'مرحباً بك في نظام الدعم الفني الخاص بسيرفر LIGHT.' },
   
+  // إعدادات حالة البوت (Bot Presence & Status)
+  botName: { type: String, default: 'Light Ticket Bot' },
+  botAvatar: { type: String, default: 'https://i.postimg.cc/tJW3r0PJ/Screenshot-20261001-232609-ibis-Paint-X.jpg' },
+  botStatus: { type: String, default: 'online' }, // online, idle, dnd, invisible
+  activityType: { type: Number, default: 0 }, // 0: Playing, 2: Listening, 3: Watching, 5: Competing
+  activityText: { type: String, default: '-help / التذاكر' },
+
   claimPoints: { type: Number, default: 1 },
   warnPoints: { type: Number, default: 1 },
   timeoutPoints: { type: Number, default: 1 },
@@ -72,7 +79,6 @@ app.set('trust proxy', 1);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// 🔴 منع تخزين الكاش نهائياً لمنع تجمد البيانات في المتصفح والشبكة
 app.use((req, res, next) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
     res.setHeader('Pragma', 'no-cache');
@@ -351,7 +357,7 @@ app.get('/dashboard/:guildId', async (req, res) => {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>إعدادات ${guild.name} | ${BOT_NAME}</title>
+        <title>إعدادات ${guild.name} \vert{}${BOT_NAME}</title>
         <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
         <style>
@@ -385,7 +391,8 @@ app.get('/dashboard/:guildId', async (req, res) => {
         <div class="navbar"><a href="/dashboard" class="btn-back"><i class="fa-solid fa-arrow-right"></i> العودة</a><span>سيرفر: <b>${guild.name}</b></span></div>
         <div class="main-layout">
             <div class="sidebar">
-                <button class="tab-btn active" onclick="openTab(event, 'channels')"><i class="fa-solid fa-hashtag"></i> الرومات والرتب</button>
+                <button class="tab-btn active" onclick="openTab(event, 'botsettings')"><i class="fa-solid fa-robot"></i> إعدادات البوت</button>
+                <button class="tab-btn" onclick="openTab(event, 'channels')"><i class="fa-solid fa-hashtag"></i> الرومات والرتب</button>
                 <button class="tab-btn" onclick="openTab(event, 'design')"><i class="fa-solid fa-palette"></i> التصاميم والصور</button>
                 <button class="tab-btn" onclick="openTab(event, 'categories')"><i class="fa-solid fa-list-check"></i> أقسام القائمة</button>
                 <button class="tab-btn" onclick="openTab(event, 'cmdnames')"><i class="fa-solid fa-terminal"></i> أسماء الأوامر والبادئة</button>
@@ -393,7 +400,39 @@ app.get('/dashboard/:guildId', async (req, res) => {
                 <button class="tab-btn" onclick="openTab(event, 'points')"><i class="fa-solid fa-trophy"></i> إعدادات النقاط</button>
             </div>
             <div class="content-panel">
-                <div id="channels" class="tab-content active">
+                <!-- قسم إعدادات البوت الجديد -->
+                <div id="botsettings" class="tab-content active">
+                    <h2><i class="fa-solid fa-robot" style="color:#5865f2;"></i> إعدادات حالة واسم وصورة البوت</h2>
+                    <div class="form-grid">
+                        <div class="form-group"><label>اسم البوت (Bot Name):</label><input type="text" id="botName"></div>
+                        <div class="form-group"><label>رابط صورة البوت (Avatar URL):</label><input type="text" id="botAvatar"></div>
+                        <div class="form-group">
+                            <label>حالة البوت (Status):</label>
+                            <select id="botStatus">
+                                <option value="online">متصل (Online)</option>
+                                <option value="idle">مشغول / خامل (Idle)</option>
+                                <option value="dnd">عدم الإزعاج (Do Not Disturb)</option>
+                                <option value="invisible">مخفي (Invisible)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>نوع النشاط (Activity Type):</label>
+                            <select id="activityType">
+                                <option value="0">يلعب (Playing)</option>
+                                <option value="2">يستمع إلى (Listening)</option>
+                                <option value="3">يشاهد (Watching)</option>
+                                <option value="5">في منافسة (Competing)</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="grid-column: 1 / -1;">
+                            <label>نص النشاط / الحالة (Activity Text):</label>
+                            <input type="text" id="activityText" placeholder="مثال: -help | نظام التذاكر">
+                        </div>
+                    </div>
+                    <button type="button" class="btn-save" onclick="saveBotSettings()"><i class="fa-solid fa-floppy-disk"></i> حفظ إعدادات البوت</button>
+                </div>
+
+                <div id="channels" class="tab-content">
                     <h2>إعدادات الرومات والرتب الذكية</h2>
                     <div class="form-grid">
                         <div class="form-group"><label>رتبة الإدارة الرئيسية:</label><select id="staffRoleId" class="single-role-select"><option value="">جاري جلب الرتب...</option></select></div>
@@ -499,6 +538,12 @@ app.get('/dashboard/:guildId', async (req, res) => {
                     const res = await fetch('/api/settings/' + currentGuildId + '?_t=' + Date.now());
                     const data = await res.json();
                     if (data && !data.error) {
+                        if (data.botName) document.getElementById('botName').value = data.botName;
+                        if (data.botAvatar) document.getElementById('botAvatar').value = data.botAvatar;
+                        if (data.botStatus) document.getElementById('botStatus').value = data.botStatus;
+                        if (data.activityType !== undefined) document.getElementById('activityType').value = data.activityType;
+                        if (data.activityText) document.getElementById('activityText').value = data.activityText;
+
                         if (data.prefix) document.getElementById('prefix').value = data.prefix;
                         if (data.staffRoleId) document.getElementById('staffRoleId').value = data.staffRoleId;
                         if (data.ticketCategoryId) document.getElementById('ticketCategoryId').value = data.ticketCategoryId;
@@ -559,6 +604,15 @@ app.get('/dashboard/:guildId', async (req, res) => {
                 } catch (err) { alert('❌ تعذر الاتصال.'); }
             }
 
+            function saveBotSettings() {
+                postPayload({
+                    botName: document.getElementById('botName').value.trim(),
+                    botAvatar: document.getElementById('botAvatar').value.trim(),
+                    botStatus: document.getElementById('botStatus').value,
+                    activityType: Number(document.getElementById('activityType').value) || 0,
+                    activityText: document.getElementById('activityText').value.trim()
+                }, '✅ تم حفظ إعدادات البوت بنجاح!');
+            }
             function saveChannels() {
                 postPayload({
                     staffRoleId: document.getElementById('staffRoleId').value.trim(),

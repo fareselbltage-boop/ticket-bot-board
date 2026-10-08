@@ -30,7 +30,7 @@ const BOT_NAME = process.env.BOT_NAME || 'Light Ticket Bot';
 const BOT_AVATAR = process.env.BOT_AVATAR || 'https://i.postimg.cc/tJW3r0PJ/Screenshot-20261001-232609-ibis-Paint-X.jpg';
 const SITE_BG = 'https://i.postimg.cc/s2x5kG7S/1791496064027.jpg';
 
-if (MONGO_URI) {
+if (MONGO_URI && mongoose.connection.readyState === 0) {
     mongoose.connect(MONGO_URI)
         .then(() => console.log('MongoDB Connected in Dashboard & Bot'))
         .catch(err => console.error('MongoDB Error:', err));
@@ -125,7 +125,7 @@ const pointsSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 pointsSchema.index({ guildId: 1, userId: 1 }, { unique: true });
-const StaffPoints = mongoose.model('StaffPoints', pointsSchema);
+const StaffPoints = mongoose.models.StaffPoints || mongoose.model('StaffPoints', pointsSchema);
 
 const ticketSchema = new mongoose.Schema({
   guildId: String,
@@ -138,7 +138,7 @@ const ticketSchema = new mongoose.Schema({
   lastRename: { type: Number, default: 0 }
 }, { timestamps: true });
 
-const TicketModel = mongoose.model('Ticket', ticketSchema);
+const TicketModel = mongoose.models.Ticket || mongoose.model('Ticket', ticketSchema);
 
 const rolePermissionsSchema = new mongoose.Schema({
   guildId: { type: String, required: true },
@@ -147,7 +147,7 @@ const rolePermissionsSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 rolePermissionsSchema.index({ guildId: 1, roleId: 1 }, { unique: true });
-const RolePermissions = mongoose.model('RolePermissions', rolePermissionsSchema);
+const RolePermissions = mongoose.models.RolePermissions || mongoose.model('RolePermissions', rolePermissionsSchema);
 
 async function isStaff(member) {
   const config = await getSettings(member.guild.id);
@@ -668,7 +668,7 @@ app.get('/logout', (req, res) => {
     req.session.destroy(() => res.redirect('/'));
 });
 
-// تشغيل البوت وأوامره التفاعلية
+// تشغيل الأحداث وأوامر البوت الكاملة
 client.once('ready', async () => {
   console.log(`BOT ONLINE: ${client.user.tag}`);
   try {
@@ -684,36 +684,118 @@ client.once('ready', async () => {
 });
 
 client.on('messageCreate', async message => {
-  if (message.author.bot || !message.guild) return;
-  const config = await getSettings(message.guild.id);
-  const currentPrefix = config.prefix || '-';
-  if (!message.content.startsWith(currentPrefix)) return;
+  try {
+    if (message.author.bot || !message.guild) return;
+    const config = await getSettings(message.guild.id);
+    const currentPrefix = config.prefix || '-';
+    if (!message.content.startsWith(currentPrefix)) return;
 
-  const args = message.content.slice(currentPrefix.length).trim().split(/\s+/);
-  const command = (args.shift() || '').toLowerCase();
+    const args = message.content.slice(currentPrefix.length).trim().split(/\s+/);
+    const inputCmd = (args.shift() || '').toLowerCase();
 
-  if (command === 'panel') {
-    if (!isAdmin(message.member)) return message.reply('❌ مخصص للإدارة.');
-    const embed = new EmbedBuilder().setColor(0x2B2D31).setTitle(config.panelTitle).setDescription(config.panelDescription).setImage(config.panelImage);
-    const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('open_ticket').setLabel('فتح تكت').setEmoji('🎫').setStyle(ButtonStyle.Primary));
-    return message.channel.send({ embeds: [embed], components: [row] });
-  }
+    let command = inputCmd;
+    const defaultAliases = {
+      add: 'add', come: 'come', rename: 'rename', claim: 'استلام',
+      timeout: 'تايم', warn: 'تحذير', close: 'اغلاق', delete: 'حذف',
+      addpoints: 'addpoints', removepoints: 'removepoints'
+    };
 
-  if (command === 'close') {
-    if (!await isTicketChannel(message.channel)) return;
-    await closeTicket(message.channel, message.author);
-    return message.reply({ embeds: [new EmbedBuilder().setColor(0xED4245).setTitle('🔒 تم إغلاق التكت')] });
-  }
+    if (config.commandAliases && config.commandAliases.get) {
+      for (const [canonical, customAlias] of config.commandAliases.entries()) {
+        if (customAlias && customAlias.toLowerCase() === inputCmd) { command = canonical; break; }
+      }
+    } else {
+      for (const [canonical, defaultAlias] of Object.entries(defaultAliases)) {
+        if (defaultAlias.toLowerCase() === inputCmd) { command = canonical; break; }
+      }
+    }
+
+    if (command === 'panel') {
+      if (!isAdmin(message.member)) return message.reply('❌ مخصص للإدارة العليا فقط.');
+      const embed = new EmbedBuilder().setColor(0x2B2D31).setTitle(config.panelTitle).setDescription(config.panelDescription).setImage(config.panelImage);
+      const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('open_ticket').setLabel('فتح تكت').setEmoji('🎫').setStyle(ButtonStyle.Primary));
+      return message.channel.send({ embeds: [embed], components: [row] });
+    }
+
+    if (command === 'نقاطي') {
+      if (!await isStaff(message.member)) return message.reply('❌ مخصص للإدارة.');
+      const points = await getPoints(message.guild.id, message.author.id);
+      return message.reply(`🏆 نقاطك الحالية: **${points}**`);
+    }
+
+    const isTicket = await isTicketChannel(message.channel);
+    const managedNames = ALL_MANAGED_COMMANDS.map(c => c.name);
+    if (managedNames.includes(command)) {
+      if (!await hasCommandPermission(message.member, command)) return message.reply('❌ ليس لديك صلاحية.');
+    }
+
+    if (command === 'add') {
+      if (!isTicket) return message.reply('❌ استخدم الأمر داخل التكت.');
+      const member = message.mentions.members.first();
+      if (!member) return message.reply('❌ حدد العضو.');
+      await message.channel.permissionOverwrites.edit(member.id, { ViewChannel: true, SendMessages: true });
+      return message.reply(`✅ تم إضافة ${member}.`);
+    }
+
+    if (command === 'close') {
+      if (!isTicket) return;
+      await closeTicket(message.channel, message.author);
+      return message.reply({ embeds: [new EmbedBuilder().setColor(0xED4245).setTitle('🔒 تم إغلاق التكت')] });
+    }
+
+    if (command === 'delete') {
+      if (!isTicket) return;
+      return deleteTicket(message.channel, message);
+    }
+  } catch (err) { console.error(err); }
 });
 
 client.on('interactionCreate', async interaction => {
-  if (!interaction.isButton() || interaction.customId !== 'open_ticket') return;
-  const config = await getSettings(interaction.guild.id);
-  const menu = new StringSelectMenuBuilder().setCustomId('ticket_type').setPlaceholder('اختر نوع التذكرة...').addOptions(
-    (config.selectOptions || []).map(o => ({ label: o.label, value: o.value, emoji: o.emoji || '🎫', description: o.description }))
-  );
-  return interaction.reply({ content: '🎫 اختر القسم:', components: [new ActionRowBuilder().addComponents(menu)], ephemeral: true });
+  try {
+    const config = await getSettings(interaction.guild.id);
+    if (interaction.isButton() && interaction.customId === 'open_ticket') {
+      const options = config.selectOptions || [];
+      const menu = new StringSelectMenuBuilder().setCustomId('ticket_type').setPlaceholder('اختر نوع التذكرة...').addOptions(
+        options.map(o => ({ label: o.label, value: o.value, emoji: o.emoji || '🎫', description: o.description }))
+      );
+      return interaction.reply({ content: '🎫 اختر القسم:', components: [new ActionRowBuilder().addComponents(menu)], ephemeral: true });
+    }
+
+    if (interaction.isStringSelectMenu() && interaction.customId === 'ticket_type') {
+      await interaction.deferReply({ ephemeral: true });
+      const selectedValue = interaction.values[0];
+      const matchedOpt = (config.selectOptions || []).find(o => o.value === selectedValue);
+      const labelName = matchedOpt ? matchedOpt.label : 'تكت';
+
+      const channel = await interaction.guild.channels.create({
+        name: `${labelName}-${interaction.user.username}`,
+        type: ChannelType.GuildText,
+        parent: config.ticketCategoryId || null,
+        permissionOverwrites: [
+          { id: interaction.guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+          { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
+          { id: client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
+        ]
+      });
+
+      await TicketModel.create({ guildId: interaction.guild.id, channelId: channel.id, ownerId: interaction.user.id, type: labelName });
+      const embed = new EmbedBuilder().setColor(0x5865F2).setTitle(`🎫 تذكرة جديدة | ${labelName}`).setImage(config.ticketImage);
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('claim_ticket').setLabel('استلام').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('close_ticket').setLabel('إغلاق').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('delete_ticket').setLabel('حذف').setStyle(ButtonStyle.Danger)
+      );
+      await channel.send({ content: `${interaction.user}`, embeds: [embed], components: [row] });
+      return interaction.editReply({ content: `✅ تم إنشاء تذكرتك: ${channel}` });
+    }
+  } catch (err) { console.error(err); }
 });
 
-app.listen(PORT, () => console.log(`Server & Bot running on port ${PORT}`));
+// التوافق التام مع Vercel والإطلاق المحلي
+module.exports = app;
+
+if (process.env.NODE_ENV !== 'production') {
+    app.listen(PORT, () => console.log(`Server & Bot running on port ${PORT}`));
+}
+
 client.login(BOT_TOKEN);

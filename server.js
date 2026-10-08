@@ -22,7 +22,6 @@ if (MONGO_URI) {
         .catch(err => console.error('MongoDB Error:', err));
 }
 
-// موديل GuildSettings المطور لدعم أسماء الأوامر والبادئة المخصصة
 const GuildSettings = mongoose.models.GuildSettings || mongoose.model('GuildSettings', new mongoose.Schema({
   guildId: { type: String, required: true, unique: true },
   prefix: { type: String, default: '-' },
@@ -49,8 +48,6 @@ const GuildSettings = mongoose.models.GuildSettings || mongoose.model('GuildSett
   },
 
   commandPermissions: { type: Map, of: String, default: {} },
-
-  // أسماء الأوامر المخصصة
   commandAliases: {
     type: Map,
     of: String,
@@ -138,6 +135,24 @@ async function getFreshUserGuilds(req) {
         return isManager && botInGuild;
     });
 }
+
+// API لجلب جميع رتب السيرفر الحالية
+app.get('/api/roles/:guildId', async (req, res) => {
+    if (!req.session.user) return res.status(401).json({ error: 'غير مصرح' });
+    try {
+        const response = await axios.get(`https://discord.com/api/v10/guilds/${req.params.guildId}/roles`, {
+            headers: { Authorization: `Bot ${BOT_TOKEN}` }
+        });
+        // استبعاد رتبة @everyone والرتب التي تمتلكها البوتات التلقائية
+        const roles = response.data
+            .filter(r => r.name !== '@everyone' && !r.managed)
+            .map(r => ({ id: r.id, name: r.name, color: r.color }));
+        res.json(roles);
+    } catch (err) {
+        console.error('Fetch Roles Error:', err.response ? err.response.data : err.message);
+        res.status(500).json({ error: 'تعذر جلب رتب السيرفر' });
+    }
+});
 
 app.get('/api/settings/:guildId', async (req, res) => {
     if (!req.session.user) return res.status(401).json({ error: 'غير مصرح' });
@@ -468,7 +483,7 @@ app.get('/dashboard/:guildId', async (req, res) => {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>إعدادات ${guild.name} \vert{}${BOT_NAME}</title>
+        <title>إعدادات ${guild.name} | ${BOT_NAME}</title>
 
         <meta property="og:type" content="website">
         <meta property="og:title" content="${BOT_NAME} - إعدادات السيرفر">
@@ -510,8 +525,9 @@ app.get('/dashboard/:guildId', async (req, res) => {
             .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
             .form-group { margin-bottom: 20px; }
             label { display: block; margin-bottom: 8px; font-weight: 600; color: #b5bac1; font-size: 14px; }
-            input, textarea { width: 100%; padding: 12px; background: rgba(11, 14, 20, 0.7); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #fff; font-size: 14px; outline: none; }
-            input:focus, textarea:focus { border-color: #5865f2; }
+            input, select, textarea { width: 100%; padding: 12px; background: rgba(11, 14, 20, 0.7); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #fff; font-size: 14px; outline: none; }
+            select option { background: #161b22; color: #fff; }
+            input:focus, select:focus, textarea:focus { border-color: #5865f2; }
             .btn-save { background: #5865f2; color: #fff; border: none; padding: 12px 28px; border-radius: 8px; font-weight: 700; cursor: pointer; transition: 0.3s; margin-top: 10px; }
             .btn-save:hover { background: #4752c4; }
             .cmd-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 15px; }
@@ -541,8 +557,10 @@ app.get('/dashboard/:guildId', async (req, res) => {
                     <h2><i class="fa-solid fa-hashtag" style="color:#5865f2;"></i> إعدادات الرومات والرتب الذكية</h2>
                     <div class="form-grid">
                         <div class="form-group">
-                            <label>رتبة الإدارة الرئيسية (STAFF_ROLE_ID):</label>
-                            <input type="text" id="staffRoleId" placeholder="أدخل ID الرتبة">
+                            <label>رتبة الإدارة الرئيسية (STAFF_ROLE):</label>
+                            <select id="staffRoleId" class="role-select">
+                                <option value="">جاري جلب الرتب...</option>
+                            </select>
                         </div>
                         <div class="form-group">
                             <label>كاتيجوري التكتات (TICKET_CATEGORY_ID):</label>
@@ -625,20 +643,20 @@ app.get('/dashboard/:guildId', async (req, res) => {
                     <button type="button" class="btn-save" onclick="saveAliases()"><i class="fa-solid fa-floppy-disk"></i> حفظ أسماء الأوامر</button>
                 </div>
 
-                <!-- Tab 5: Command Permissions -->
+                <!-- Tab 5: Command Permissions with Server Roles Dropdowns -->
                 <div id="permissions" class="tab-content">
-                    <h2><i class="fa-solid fa-user-shield" style="color:#eb459e;"></i> صلاحيات الأوامر بالرتب (ID الرتبة المسموحة)</h2>
+                    <h2><i class="fa-solid fa-user-shield" style="color:#eb459e;"></i> صلاحيات الأوامر بالرتب (اختر من رتب السيرفر)</h2>
                     <div class="cmd-grid">
-                        <div class="cmd-card"><label>أمر الإضافة</label><input type="text" id="perm_add" placeholder="ID الرتبة المسموحة"></div>
-                        <div class="cmd-card"><label>أمر المنشن</label><input type="text" id="perm_come" placeholder="ID الرتبة المسموحة"></div>
-                        <div class="cmd-card"><label>أمر تغيير الاسم</label><input type="text" id="perm_rename" placeholder="ID الرتبة المسموحة"></div>
-                        <div class="cmd-card"><label>أمر الاستلام</label><input type="text" id="perm_claim" placeholder="ID الرتبة المسموحة"></div>
-                        <div class="cmd-card"><label>أمر التايم أوت</label><input type="text" id="perm_timeout" placeholder="ID الرتبة المسموحة"></div>
-                        <div class="cmd-card"><label>أمر التحذير</label><input type="text" id="perm_warn" placeholder="ID الرتبة المسموحة"></div>
-                        <div class="cmd-card"><label>أمر إغلاق التكت</label><input type="text" id="perm_close" placeholder="ID الرتبة المسموحة"></div>
-                        <div class="cmd-card"><label>أمر حذف التكت</label><input type="text" id="perm_delete" placeholder="ID الرتبة المسموحة"></div>
-                        <div class="cmd-card"><label>أمر إضافة نقاط</label><input type="text" id="perm_addpoints" placeholder="ID الرتبة المسموحة"></div>
-                        <div class="cmd-card"><label>أمر خصم نقاط</label><input type="text" id="perm_removepoints" placeholder="ID الرتبة المسموحة"></div>
+                        <div class="cmd-card"><label>أمر الإضافة (add)</label><select id="perm_add" class="role-select"><option value="">الجميع (افتراضي)</option></select></div>
+                        <div class="cmd-card"><label>أمر المنشن (come)</label><select id="perm_come" class="role-select"><option value="">الجميع (افتراضي)</option></select></div>
+                        <div class="cmd-card"><label>أمر تغيير الاسم (rename)</label><select id="perm_rename" class="role-select"><option value="">الجميع (افتراضي)</option></select></div>
+                        <div class="cmd-card"><label>أمر الاستلام (claim)</label><select id="perm_claim" class="role-select"><option value="">الجميع (افتراضي)</option></select></div>
+                        <div class="cmd-card"><label>أمر التايم أوت (timeout)</label><select id="perm_timeout" class="role-select"><option value="">الجميع (افتراضي)</option></select></div>
+                        <div class="cmd-card"><label>أمر التحذير (warn)</label><select id="perm_warn" class="role-select"><option value="">الجميع (افتراضي)</option></select></div>
+                        <div class="cmd-card"><label>أمر إغلاق التكت (close)</label><select id="perm_close" class="role-select"><option value="">الجميع (افتراضي)</option></select></div>
+                        <div class="cmd-card"><label>أمر حذف التكت (delete)</label><select id="perm_delete" class="role-select"><option value="">الجميع (افتراضي)</option></select></div>
+                        <div class="cmd-card"><label>أمر إضافة نقاط (addpoints)</label><select id="perm_addpoints" class="role-select"><option value="">الجميع (افتراضي)</option></select></div>
+                        <div class="cmd-card"><label>أمر خصم نقاط (removepoints)</label><select id="perm_removepoints" class="role-select"><option value="">الجميع (افتراضي)</option></select></div>
                     </div>
                     <button type="button" class="btn-save" onclick="savePermissions()"><i class="fa-solid fa-floppy-disk"></i> حفظ الصلاحيات</button>
                 </div>
@@ -672,8 +690,35 @@ app.get('/dashboard/:guildId', async (req, res) => {
 
         <script>
             const currentGuildId = "${guild.id}";
+            let serverRoles = [];
+
+            async function loadRoles() {
+                try {
+                    const res = await fetch('/api/roles/' + currentGuildId);
+                    serverRoles = await res.json();
+
+                    const selects = document.querySelectorAll('.role-select');
+                    selects.forEach(select => {
+                        const isStaffSelect = select.id === 'staffRoleId';
+                        select.innerHTML = isStaffSelect 
+                            ? '<option value="">-- اختر رتبة الإدارة --</option>' 
+                            : '<option value="">الجميع / بدون رتبة مخصصة</option>';
+
+                        serverRoles.forEach(role => {
+                            const opt = document.createElement('option');
+                            opt.value = role.id;
+                            opt.textContent = '🛡️ ' + role.name;
+                            select.appendChild(opt);
+                        });
+                    });
+                } catch (err) {
+                    console.error('Error loading roles:', err);
+                }
+            }
 
             window.addEventListener('DOMContentLoaded', async () => {
+                await loadRoles();
+
                 try {
                     const res = await fetch('/api/settings/' + currentGuildId);
                     const data = await res.json();
@@ -704,7 +749,7 @@ app.get('/dashboard/:guildId', async (req, res) => {
 
                             document.getElementById('opt3_label').value = data.selectOptions[2].label || '';
                             document.getElementById('opt3_emoji').value = data.selectOptions[2].emoji || '';
-                            document.getElementById('opt3_desc').value = data.selectOptions[0].description || '';
+                            document.getElementById('opt3_desc').value = data.selectOptions[2].description || '';
                         }
 
                         if (data.commandAliases) {
@@ -813,7 +858,7 @@ app.get('/dashboard/:guildId', async (req, res) => {
             function savePermissions() {
                 const commandPermissions = {};
                 ['add', 'come', 'rename', 'claim', 'timeout', 'warn', 'close', 'delete', 'addpoints', 'removepoints'].forEach(cmd => {
-                    commandPermissions[cmd] = document.getElementById('perm_' + cmd).value.trim();
+                    commandPermissions[cmd] = document.getElementById('perm_' + cmd).value;
                 });
                 postPayload({ commandPermissions }, '✅ تم حفظ صلاحيات الأوامر بالرتب بنجاح!');
             }

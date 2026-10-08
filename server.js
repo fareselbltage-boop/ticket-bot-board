@@ -22,7 +22,7 @@ if (MONGO_URI) {
         .catch(err => console.error('MongoDB Error:', err));
 }
 
-// موديل GuildSettings (commandPermissions أصبحت تدعم مصفوفة من النصوص Array of Strings)
+// موديل GuildSettings مع القيم الأصلية ودعم عدة رتب للصلاحيات (Array of Strings)
 const GuildSettings = mongoose.models.GuildSettings || mongoose.model('GuildSettings', new mongoose.Schema({
   guildId: { type: String, required: true, unique: true },
   prefix: { type: String, default: '-' },
@@ -72,6 +72,7 @@ app.set('trust proxy', 1);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// 🔴 منع تخزين الكاش نهائياً لمنع تجمد البيانات في المتصفح والشبكة
 app.use((req, res, next) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
     res.setHeader('Pragma', 'no-cache');
@@ -470,7 +471,6 @@ app.get('/dashboard/:guildId', async (req, res) => {
                     const res = await fetch('/api/roles/' + currentGuildId + '?_t=' + Date.now());
                     serverRoles = await res.json();
                     
-                    // تعبئة رتبة الإدارة المفردة
                     const staffSelect = document.getElementById('staffRoleId');
                     staffSelect.innerHTML = '<option value="">-- اختر رتبة الإدارة --</option>';
                     serverRoles.forEach(role => {
@@ -480,7 +480,6 @@ app.get('/dashboard/:guildId', async (req, res) => {
                         staffSelect.appendChild(opt);
                     });
 
-                    // تعبئة قوائم الصلاحيات المتعددة
                     const multiSelects = document.querySelectorAll('.multi-role-select');
                     multiSelects.forEach(select => {
                         select.innerHTML = '';

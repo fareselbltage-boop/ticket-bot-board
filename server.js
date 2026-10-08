@@ -13,7 +13,8 @@ const MONGO_URI = process.env.MONGO_URI;
 const BOT_TOKEN = process.env.TOKEN;
 
 const BOT_NAME = process.env.BOT_NAME || 'Light Ticket Bot';
-const BOT_AVATAR = process.env.BOT_AVATAR || 'https://cdn.discordapp.com/embed/avatars/0.png';
+const BOT_AVATAR = process.env.BOT_AVATAR || 'https://i.postimg.cc/tJW3r0PJ/Screenshot-20261001-232609-ibis-Paint-X.jpg';
+const SITE_BG = 'https://i.postimg.cc/s2x5kG7S/1791496064027.jpg';
 
 // الاتصال بـ MongoDB
 if (MONGO_URI) {
@@ -175,17 +176,81 @@ app.get('/', (req, res) => {
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
         <style>
             * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Cairo', sans-serif; }
-            body { background: #0b0e14; color: #ffffff; min-height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; }
-            .card { background: rgba(22, 27, 34, 0.85); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 20px; padding: 40px 30px; max-width: 480px; width: 90%; text-align: center; }
-            .bot-avatar { width: 100px; height: 100px; border-radius: 50%; border: 3px solid #5865F2; margin-bottom: 20px; object-fit: cover; }
-            .btn-login { display: inline-flex; align-items: center; justify-content: center; gap: 12px; width: 100%; background: #5865F2; color: #fff; padding: 14px 28px; font-size: 16px; font-weight: 700; border-radius: 12px; text-decoration: none; }
+            body {
+                color: #ffffff;
+                min-height: 100vh;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
+                position: relative;
+                overflow: hidden;
+                background-color: #0b0e14;
+            }
+            body::before {
+                content: "";
+                position: fixed;
+                top: 0; left: 0; right: 0; bottom: 0;
+                background: url('${SITE_BG}') no-repeat center center/cover;
+                z-index: -1;
+                filter: brightness(0.4) blur(2px);
+                animation: animatedBg 20s infinite alternate ease-in-out;
+            }
+            @keyframes animatedBg {
+                0% { transform: scale(1); }
+                100% { transform: scale(1.08); }
+            }
+            .card {
+                background: rgba(15, 18, 25, 0.75);
+                backdrop-filter: blur(16px);
+                -webkit-backdrop-filter: blur(16px);
+                border: 1px solid rgba(255, 255, 255, 0.12);
+                border-radius: 24px;
+                padding: 45px 35px;
+                max-width: 480px;
+                width: 90%;
+                text-align: center;
+                box-shadow: 0 25px 50px rgba(0,0,0,0.7);
+            }
+            .bot-avatar {
+                width: 110px;
+                height: 110px;
+                border-radius: 50%;
+                border: 3px solid #5865F2;
+                margin-bottom: 20px;
+                object-fit: cover;
+                box-shadow: 0 0 25px rgba(88,101,242,0.5);
+            }
+            h1 { font-size: 28px; font-weight: 800; margin-bottom: 10px; color: #fff; }
+            p { margin: 15px 0 30px; color: #b9bbbe; font-size: 15px; line-height: 1.6; }
+            .btn-login {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                gap: 12px;
+                width: 100%;
+                background: #5865F2;
+                color: #fff;
+                padding: 14px 28px;
+                font-size: 16px;
+                font-weight: 700;
+                border-radius: 12px;
+                text-decoration: none;
+                transition: all 0.3s ease;
+                box-shadow: 0 8px 20px rgba(88,101,242,0.4);
+            }
+            .btn-login:hover {
+                background: #4752C4;
+                transform: translateY(-2px);
+                box-shadow: 0 12px 25px rgba(88,101,242,0.6);
+            }
         </style>
     </head>
     <body>
         <div class="card">
             <img src="${BOT_AVATAR}" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'" alt="Bot Avatar" class="bot-avatar">
             <h1>${BOT_NAME}</h1>
-            <p style="margin: 15px 0 25px; color: #949ba4;">مرحباً بك! يرجى تسجيل الدخول بحساب ديسكورد لإدارة سيرفراتك.</p>
+            <p>مرحباً بك! يرجى تسجيل الدخول بحساب ديسكورد لإدارة واستعراض سيرفراتك.</p>
             <a href="/login" class="btn-login"><i class="fa-brands fa-discord"></i> تسجيل الدخول بواسطة Discord</a>
         </div>
     </body>
@@ -194,7 +259,7 @@ app.get('/', (req, res) => {
     res.send(html);
 });
 
-// قائمة السيرفرات (تجلب السيرفرات الحية مباشرة في كل زيارة أو Refresh)
+// قائمة السيرفرات
 app.get('/dashboard', async (req, res) => {
     if (!req.session.user) return res.redirect('/login');
 
@@ -218,7 +283,7 @@ app.get('/dashboard', async (req, res) => {
 
     if (guilds.length === 0) {
         guildsCardsHtml = `
-            <div style="grid-column: 1 / -1; text-align: center; padding: 40px; background: #181e29; border-radius: 16px; border: 1px solid rgba(255,255,255,0.07);">
+            <div style="grid-column: 1 / -1; text-align: center; padding: 40px; background: rgba(24, 30, 41, 0.85); backdrop-filter: blur(10px); border-radius: 16px; border: 1px solid rgba(255,255,255,0.07);">
                 <i class="fa-solid fa-circle-exclamation" style="font-size: 40px; color: #fee75c; margin-bottom: 15px;"></i>
                 <h3 style="margin-bottom: 10px;">لا توجد سيرفرات متاحة</h3>
                 <p style="color: #949ba4;">تأكد من أنك تمتلك صلاحية إدارة بالسيرفر وأن البوت موجود فيه حالياً.</p>
@@ -256,19 +321,33 @@ app.get('/dashboard', async (req, res) => {
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
         <style>
             * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Cairo', sans-serif; }
-            body { background: #0f1219; color: #ffffff; min-height: 100vh; padding-bottom: 50px; }
-            .navbar { background: #161b22; border-bottom: 1px solid rgba(255,255,255,0.08); padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; }
+            body { color: #ffffff; min-height: 100vh; padding-bottom: 50px; background-color: #0f1219; position: relative; }
+            body::before {
+                content: "";
+                position: fixed;
+                top: 0; left: 0; right: 0; bottom: 0;
+                background: url('${SITE_BG}') no-repeat center center/cover;
+                z-index: -1;
+                filter: brightness(0.35) blur(2px);
+                animation: animatedBg 20s infinite alternate ease-in-out;
+            }
+            @keyframes animatedBg {
+                0% { transform: scale(1); }
+                100% { transform: scale(1.08); }
+            }
+            .navbar { background: rgba(22, 27, 34, 0.85); backdrop-filter: blur(12px); border-bottom: 1px solid rgba(255,255,255,0.08); padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; }
             .user-profile { display: flex; align-items: center; gap: 12px; }
             .user-avatar { width: 45px; height: 45px; border-radius: 50%; border: 2px solid #5865f2; }
-            .btn-logout { background: rgba(237, 66, 69, 0.15); color: #ed4245; padding: 8px 16px; border-radius: 8px; text-decoration: none; font-weight: 600; }
+            .btn-logout { background: rgba(237, 66, 69, 0.2); color: #ed4245; padding: 8px 16px; border-radius: 8px; text-decoration: none; font-weight: 600; border: 1px solid rgba(237, 66, 69, 0.3); }
             .container { max-width: 1100px; margin: 40px auto; padding: 0 20px; }
             .page-title { font-size: 24px; font-weight: 800; margin-bottom: 25px; display: flex; align-items: center; gap: 10px; }
             .guilds-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; }
-            .guild-card { background: #181e29; border: 1px solid rgba(255,255,255,0.07); border-radius: 16px; padding: 20px; display: flex; flex-direction: column; align-items: center; text-align: center; }
+            .guild-card { background: rgba(24, 30, 41, 0.85); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 20px; display: flex; flex-direction: column; align-items: center; text-align: center; transition: all 0.3s; }
+            .guild-card:hover { transform: translateY(-4px); border-color: #5865f2; box-shadow: 0 10px 25px rgba(88,101,242,0.2); }
             .guild-icon { width: 70px; height: 70px; border-radius: 20px; margin-bottom: 12px; object-fit: cover; }
             .guild-name { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
             .guild-id { font-size: 12px; color: #80848e; margin-bottom: 18px; }
-            .btn-manage { width: 100%; background: rgba(88,101,242,0.15); color: #5865f2; border: 1px solid rgba(88,101,242,0.4); padding: 10px; border-radius: 10px; text-decoration: none; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+            .btn-manage { width: 100%; background: rgba(88,101,242,0.2); color: #5865f2; border: 1px solid rgba(88,101,242,0.4); padding: 10px; border-radius: 10px; text-decoration: none; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; gap: 8px; transition: 0.3s; }
             .btn-manage:hover { background: #5865f2; color: #fff; }
         </style>
     </head>
@@ -298,7 +377,6 @@ app.get('/dashboard/:guildId', async (req, res) => {
 
     const guildId = String(req.params.guildId);
     
-    // إعادة التحقق المباشر من أن البوت والمستخدم موجودان في السيرفر
     let guilds = [];
     if (req.session.accessToken) {
         try {
@@ -326,27 +404,40 @@ app.get('/dashboard/:guildId', async (req, res) => {
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
         <style>
             * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Cairo', sans-serif; }
-            body { background: #0f1219; color: #ffffff; min-height: 100vh; display: flex; flex-direction: column; }
-            .navbar { background: #161b22; border-bottom: 1px solid rgba(255,255,255,0.08); padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; }
+            body { color: #ffffff; min-height: 100vh; display: flex; flex-direction: column; background-color: #0f1219; position: relative; }
+            body::before {
+                content: "";
+                position: fixed;
+                top: 0; left: 0; right: 0; bottom: 0;
+                background: url('${SITE_BG}') no-repeat center center/cover;
+                z-index: -1;
+                filter: brightness(0.35) blur(2px);
+                animation: animatedBg 20s infinite alternate ease-in-out;
+            }
+            @keyframes animatedBg {
+                0% { transform: scale(1); }
+                100% { transform: scale(1.08); }
+            }
+            .navbar { background: rgba(22, 27, 34, 0.85); backdrop-filter: blur(12px); border-bottom: 1px solid rgba(255,255,255,0.08); padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; }
             .btn-back { color: #5865f2; text-decoration: none; font-weight: 700; display: inline-flex; align-items: center; gap: 8px; }
             .main-layout { display: flex; flex: 1; max-width: 1200px; width: 100%; margin: 30px auto; gap: 25px; padding: 0 20px; }
-            .sidebar { width: 270px; background: #181e29; border: 1px solid rgba(255,255,255,0.07); border-radius: 16px; padding: 15px; display: flex; flex-direction: column; gap: 8px; height: fit-content; }
-            .tab-btn { background: transparent; border: none; color: #949ba4; padding: 12px 16px; border-radius: 10px; cursor: pointer; text-align: right; font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 12px; }
+            .sidebar { width: 270px; background: rgba(24, 30, 41, 0.85); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 15px; display: flex; flex-direction: column; gap: 8px; height: fit-content; }
+            .tab-btn { background: transparent; border: none; color: #949ba4; padding: 12px 16px; border-radius: 10px; cursor: pointer; text-align: right; font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 12px; transition: all 0.3s; }
             .tab-btn:hover { background: rgba(255,255,255,0.05); color: #fff; }
             .tab-btn.active { background: #5865f2; color: #fff; }
-            .content-panel { flex: 1; background: #181e29; border: 1px solid rgba(255,255,255,0.07); border-radius: 16px; padding: 30px; }
+            .content-panel { flex: 1; background: rgba(24, 30, 41, 0.85); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 30px; }
             .tab-content { display: none; }
             .tab-content.active { display: block; }
             h2 { font-size: 20px; font-weight: 800; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 12px; display: flex; align-items: center; gap: 10px; }
             .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
             .form-group { margin-bottom: 20px; }
             label { display: block; margin-bottom: 8px; font-weight: 600; color: #b5bac1; font-size: 14px; }
-            input, textarea { width: 100%; padding: 12px; background: #0b0e14; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #fff; font-size: 14px; outline: none; }
+            input, textarea { width: 100%; padding: 12px; background: rgba(11, 14, 20, 0.7); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #fff; font-size: 14px; outline: none; }
             input:focus, textarea:focus { border-color: #5865f2; }
             .btn-save { background: #5865f2; color: #fff; border: none; padding: 12px 28px; border-radius: 8px; font-weight: 700; cursor: pointer; transition: 0.3s; margin-top: 10px; }
             .btn-save:hover { background: #4752c4; }
             .cmd-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
-            .cmd-item { background: #0b0e14; padding: 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center; }
+            .cmd-item { background: rgba(11, 14, 20, 0.7); padding: 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center; }
             .cmd-name { font-weight: 700; color: #5865f2; }
         </style>
     </head>

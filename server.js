@@ -366,8 +366,7 @@ app.post('/api/settings/:guildId', requireLogin, async (req, res) => {
                 if (Array.isArray(value)) {
                     updates.rolePointsConfig = value.map(item => ({
                         roleId: String(item.roleId || ''),
-                        command: String(item.command || 'claim'),
-                        points: Number(item.points) || 1
+                        commands: item.commands || {}
                     })).filter(item => validSnowflake(item.roleId));
                 }
             } else if (key === 'commandAliases') {
@@ -525,6 +524,25 @@ input:focus,textarea:focus,select:focus{border-color:#5865f2}
         return String(str || '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
     }
 
+    // دالة لحفظ المدخلات الحالية قبل أي إعادة رسم لمنع فقدان البيانات
+    function syncRolePointsFromDOM() {
+        const cards = document.querySelectorAll('#rolePointsContainer .alias-card');
+        cards.forEach((card, gIdx) => {
+            if (!rolePointsData[gIdx]) return;
+            const selectEl = card.querySelector('select');
+            if (selectEl) {
+                rolePointsData[gIdx].roleId = selectEl.value;
+            }
+            const inputs = card.querySelectorAll('input[type="number"]');
+            inputs.forEach(input => {
+                const cmdId = input.dataset.cmd;
+                if (cmdId) {
+                    rolePointsData[gIdx].commands[cmdId] = Number(input.value) || 0;
+                }
+            });
+        });
+    }
+
     function renderAliases() {
         const c = document.getElementById('aliasesContainer');
         c.innerHTML = '';
@@ -546,11 +564,13 @@ input:focus,textarea:focus,select:focus{border-color:#5865f2}
     }
 
     window.removeRolePointGroup = function(idx) {
+        syncRolePointsFromDOM();
         rolePointsData.splice(idx, 1);
         renderRolePoints();
     }
 
     function renderRolePoints() {
+        syncRolePointsFromDOM();
         const c = document.getElementById('rolePointsContainer');
         c.innerHTML = '';
         rolePointsData.forEach((group, gIdx) => {
@@ -562,7 +582,7 @@ input:focus,textarea:focus,select:focus{border-color:#5865f2}
                 let pts = (group.commands && group.commands[cmd.id] !== undefined) ? group.commands[cmd.id] : 1;
                 cmdsHtml += \`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;background:#141620;padding:8px 12px;border-radius:8px">
                     <span style="font-size:13px;color:#cbd5e1">\${cmd.name}</span>
-                    <input type="number" value="\${pts}" style="width:90px;padding:6px 10px" oninput="rolePointsData[\${gIdx}].commands['\${cmd.id}']=Number(this.value)">
+                    <input type="number" data-cmd="\${cmd.id}" value="\${pts}" style="width:90px;padding:6px 10px" oninput="rolePointsData[\${gIdx}].commands['\${cmd.id}']=Number(this.value)">
                 </div>\`;
             });
 
@@ -577,6 +597,7 @@ input:focus,textarea:focus,select:focus{border-color:#5865f2}
     }
 
     window.addRolePointConfig = () => {
+        syncRolePointsFromDOM();
         let defaultCmds = {};
         commandsList.forEach(cmd => { defaultCmds[cmd.id] = 1; });
         rolePointsData.push({ roleId: '', commands: defaultCmds });
@@ -608,7 +629,6 @@ input:focus,textarea:focus,select:focus{border-color:#5865f2}
         roles = Array.isArray(rRes) ? rRes : [];
         commandAliasesData = sRes.commandAliases || ${JSON.stringify(defaultAliases)};
         
-        // تحويل البيانات القديمة إلى الشكل الجديد الجماعي إذا لزم الأمر
         if (Array.isArray(sRes.rolePointsConfig)) {
             if (sRes.rolePointsConfig.length > 0 && sRes.rolePointsConfig[0].commands === undefined) {
                 let grouped = {};
@@ -641,6 +661,7 @@ input:focus,textarea:focus,select:focus{border-color:#5865f2}
     }
 
     document.getElementById('saveButton').onclick = async function() {
+        syncRolePointsFromDOM();
         this.disabled = true;
         document.getElementById('status').textContent = 'جارٍ الحفظ...';
         const payload = {

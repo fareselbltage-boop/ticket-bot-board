@@ -249,12 +249,6 @@ async function getFreshUserGuilds(req, forceRefresh = false) {
     throw new Error('Discord login required');
 }
 
-async function isAuthorizedGuild(req, guildId) {
-    if (!req.session?.user || !validSnowflake(String(guildId))) return false;
-    const guilds = await getFreshUserGuilds(req);
-    return guilds.some(guild => String(guild.id) === String(guildId));
-}
-
 app.get('/login', (req, res) => {
     const clientId = process.env.CLIENT_ID;
     const params = new URLSearchParams({
@@ -319,106 +313,14 @@ app.get('/', (req, res) => {
     if (req.session?.user && (req.session.accessToken || req.session.refreshToken) && !req.query.error) {
         return res.redirect('/dashboard');
     }
-    const botName = escapeHtml(BOT_NAME);
-    const botAvatar = validUrl(BOT_AVATAR) ? BOT_AVATAR : '';
-    const background = validUrl(SITE_BG) ? SITE_BG : '';
-    return res.send(`<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>${botName} - لوحة التحكم</title>
-<style>
-*{box-sizing:border-box}
-body{margin:0;min-height:100vh;font-family:Arial,sans-serif;color:#fff;background:#101116 ${background ? `url('${escapeHtml(background)}') center/cover fixed` : ''};display:flex;align-items:center;justify-content:center;padding:20px}
-body:before{content:"";position:fixed;inset:0;background:rgba(10,11,18,.82);z-index:-1}
-.card{width:100%;max-width:460px;background:rgba(27,29,40,.96);border:1px solid #343748;border-radius:22px;padding:34px;text-align:center;box-shadow:0 18px 60px #0005}
-.avatar{width:100px;height:100px;border-radius:50%;object-fit:cover;background:#383b4b}
-h1{font-size:27px;margin:18px 0 10px}
-p{color:#b9bdcd;line-height:1.8}
-a.btn{display:block;margin-top:24px;padding:14px;border-radius:12px;background:#5865f2;color:#fff;text-decoration:none;font-weight:bold}
-a.btn:hover{background:#4752c4}
-</style>
-</head>
-<body>
-<div class="card">
-${botAvatar ? `<img class="avatar" src="${escapeHtml(botAvatar)}" alt="Bot">` : ''}
-<h1>${botName}</h1>
-<p>لوحة تحكم بوت التذاكر. سجّل دخولك باستخدام Discord لإدارة إعدادات السيرفرات.</p>
-<a class="btn" href="/login">تسجيل الدخول عبر Discord</a>
-</div>
-</body>
-</html>`);
+    return res.send(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>لوحة التحكم</title></head><body style="background:#101116;color:#fff;font-family:Arial;text-align:center;padding:50px;"><h1>${escapeHtml(BOT_NAME)}</h1><a href="/login" style="background:#5865f2;color:#fff;padding:12px 20px;text-decoration:none;border-radius:10px;font-weight:bold;">تسجيل الدخول عبر Discord</a></body></html>`);
 });
 
 app.get('/dashboard', requireLogin, async (req, res) => {
     try {
         const guilds = await getFreshUserGuilds(req, true);
-        const user = req.session.user;
-        const username = escapeHtml(user.global_name || user.username);
-        const userAvatar = user.avatar
-            ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=128`
-            : 'https://cdn.discordapp.com/embed/avatars/0.png';
-
-        const guildCards = guilds.map(guild => {
-            const icon = guild.icon
-                ? `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png?size=128`
-                : 'https://cdn.discordapp.com/embed/avatars/0.png';
-            return `
-<a class="guild" href="/dashboard/${encodeURIComponent(guild.id)}">
-    <img src="${escapeHtml(icon)}" alt="">
-    <div class="guild-info">
-        <strong>${escapeHtml(guild.name || 'سيرفر بدون اسم')}</strong>
-        <span>فتح لوحة التحكم</span>
-    </div>
-    <span class="arrow">←</span>
-</a>`;
-        }).join('');
-
-        return res.send(`<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>السيرفرات - ${escapeHtml(BOT_NAME)}</title>
-<style>
-*{box-sizing:border-box}
-body{margin:0;background:#101116;color:#f5f5fa;font-family:Arial,sans-serif;padding:22px}
-header{max-width:1000px;margin:0 auto 28px;display:flex;align-items:center;justify-content:space-between;gap:15px;flex-wrap:wrap}
-.brand{font-size:22px;font-weight:bold}
-.profile{display:flex;align-items:center;gap:10px;color:#d6d8e3}
-.profile img{width:38px;height:38px;border-radius:50%}
-a{color:inherit;text-decoration:none}
-.logout{padding:10px 14px;background:#292c3a;border-radius:10px;font-size:14px}
-main{max-width:1000px;margin:auto}
-h1{font-size:28px;margin-bottom:8px}
-.subtitle{color:#a6aabd;margin-bottom:24px}
-.guilds{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}
-.guild{display:flex;align-items:center;gap:13px;padding:17px;background:#1b1d28;border:1px solid #303344;border-radius:15px}
-.guild img{width:54px;height:54px;border-radius:16px;object-fit:cover}
-.guild-info{flex:1}
-.guild-info strong{display:block;font-size:15px}
-.guild-info span{display:block;color:#a6aabd;font-size:12px;margin-top:7px}
-</style>
-</head>
-<body>
-<header>
-    <div class="brand">${escapeHtml(BOT_NAME)} | لوحة التحكم</div>
-    <div class="profile">
-        <img src="${escapeHtml(userAvatar)}" alt="">
-        <span>${username}</span>
-        <a class="logout" href="/logout">تسجيل الخروج</a>
-    </div>
-</header>
-<main>
-    <h1>اختر السيرفر</h1>
-    <div class="subtitle">اختر سيرفرًا لإدارة إعدادات البوت.</div>
-    <div class="guilds">
-        ${guildCards || '<div class="empty">لم يتم العثور على سيرفرات.</div>'}
-    </div>
-</main>
-</body>
-</html>`);
+        const guildCards = guilds.map(g => `<a href="/dashboard/${g.id}" style="display:block;background:#1b1d28;color:#fff;padding:15px;margin:10px;border-radius:10px;text-decoration:none;">${escapeHtml(g.name)}</a>`).join('');
+        return res.send(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>السيرفرات</title></head><body style="background:#101116;color:#fff;font-family:Arial;padding:30px;"><h1 style="text-align:center;">اختر سيرفر</h1><div style="max-width:500px;margin:auto;">${guildCards}</div></body></html>`);
     } catch {
         return res.redirect('/?error=login');
     }
@@ -453,49 +355,37 @@ app.post('/api/settings/:guildId', requireLogin, async (req, res) => {
         const { guildId } = req.params;
         const body = req.body || {};
         const updates = {};
-
         for (const key of Object.keys(body)) {
             if (!ALLOWED_FIELDS.includes(key)) continue;
             const value = body[key];
-
             if (key === 'prefix') {
-                updates.prefix = String(value || '').trim().slice(0, 5);
-            } else if (['staffRoleId', 'ticketCategoryId', 'logChannelId'].includes(key)) {
-                updates[key] = String(value || '');
-            } else if (['renameCooldown'].includes(key)) {
-                updates[key] = Number(value) || 0;
-            } else if (key === 'rolePointsConfig') {
-                if (Array.isArray(value)) {
-                    updates.rolePointsConfig = value.map(item => ({
-                        roleId: String(item.roleId || ''),
-                        command: String(item.command || 'claim'),
-                        points: Number(item.points) || 1
-                    })).filter(item => validSnowflake(item.roleId));
-                }
-            } else if (key === 'autoReplies') {
-                if (Array.isArray(value)) {
-                    updates.autoReplies = value.map(item => ({
-                        trigger: String(item.trigger || ''),
-                        reply: String(item.reply || ''),
-                        roleId: String(item.roleId || 'all')
-                    })).filter(i => i.trigger && i.reply);
+                updates.prefix = String(value !== undefined ? value : '').trim(); // السماح ببريفيكس فارغ
+            } else if (key === 'commandAliases') {
+                if (typeof value === 'object' && value !== null) {
+                    const cleanAliases = {};
+                    for (const [cmd, aliases] of Object.entries(value)) {
+                        if (Array.isArray(aliases)) {
+                            cleanAliases[cmd] = aliases.map(a => ({
+                                alias: String(a.alias || '').trim(),
+                                active: Boolean(a.active)
+                            })).filter(a => a.alias);
+                        }
+                    }
+                    updates.commandAliases = cleanAliases;
                 }
             } else {
                 updates[key] = value;
             }
         }
-
         let settings = await GuildSettings.findOne({ guildId });
         if (!settings) settings = new GuildSettings({ guildId });
-
         for (const [k, v] of Object.entries(updates)) {
             settings.set(k, v);
         }
-
         await settings.save();
         return res.json({ success: true, settings: plainSettings(settings) });
     } catch {
-        return res.status(500).json({ error: 'حدث خطأ أثناء الحفظ.' });
+        return res.status(500).json({ error: 'خطأ أثناء الحفظ' });
     }
 });
 
@@ -504,9 +394,7 @@ app.get('/dashboard/:guildId', requireLogin, async (req, res) => {
         const guildId = req.params.guildId;
         let guildName = 'إعدادات السيرفر';
         try {
-            const r = await axios.get(`${API}/guilds/${guildId}`, {
-                headers: { Authorization: `Bot ${BOT_TOKEN}` }
-            });
+            const r = await axios.get(`${API}/guilds/${guildId}`, { headers: { Authorization: `Bot ${BOT_TOKEN}` } });
             guildName = r.data.name;
         } catch {}
 
@@ -515,7 +403,7 @@ app.get('/dashboard/:guildId', requireLogin, async (req, res) => {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>إعدادات السيرفر - ${escapeHtml(BOT_NAME)}</title>
+<title>إعدادات السيرفر - ${escapeHtml(guildName)}</title>
 <style>
 *{box-sizing:border-box}
 body{margin:0;background:#101116;color:#f5f5fa;font-family:Arial,sans-serif}
@@ -535,7 +423,6 @@ h2{font-size:20px;margin:0 0 18px}
 .field{margin-bottom:15px}
 label{display:block;font-size:13px;color:#cdd0df;margin-bottom:7px}
 input,textarea,select{width:100%;padding:11px 12px;border:1px solid #3a3e52;border-radius:9px;background:#12141c;color:#fff;font:inherit;outline:none}
-.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
 .help{font-size:12px;color:#999fb4;margin-top:6px}
 .savebar{display:flex;align-items:center;gap:12px;margin-top:20px}
 .save{border:0;background:#5865f2;color:white;padding:12px 20px;border-radius:10px;font-weight:bold;cursor:pointer}
@@ -557,14 +444,14 @@ input,textarea,select{width:100%;padding:11px 12px;border:1px solid #3a3e52;bord
         <nav id="tabs">
             <button class="active" data-tab="general">إعدادات البوت</button>
             <button data-tab="channels">القنوات والرتب</button>
-            <button data-tab="panel">لوحة التذاكر</button>
-            <button data-tab="autoreplies">الرد التلقائي</button>
+            <button data-tab="aliases">اختصارات الأوامر</button>
             <button data-tab="rolepoints">نقاط الرتب بالأمر</button>
-            <button data-tab="points">المهلة</button>
+            <button data-tab="autoreplies">الرد التلقائي</button>
         </nav>
         <div>
             <section class="panel active" id="general">
                 <h2>إعدادات البوت</h2>
+                <div class="field"><label>البريفيكس (إذا تركته فارغاً، تعمل الأوامر بدون رمز في البداية)</label><input id="prefix"></div>
                 <div class="field"><label>اسم البوت</label><input id="botName"></div>
                 <div class="field"><label>رابط صورة البوت</label><input id="botAvatar"></div>
                 <div class="field"><label>نص النشاط</label><input id="activityText"></div>
@@ -575,27 +462,19 @@ input,textarea,select{width:100%;padding:11px 12px;border:1px solid #3a3e52;bord
                 <div class="field"><label>كاتيجوري التذاكر</label><input id="ticketCategoryId"></div>
                 <div class="field"><label>قناة اللوق</label><input id="logChannelId"></div>
             </section>
-            <section class="panel" id="panel">
-                <h2>لوحة التذاكر</h2>
-                <div class="field"><label>عنوان اللوحة</label><input id="panelTitle"></div>
-                <div class="field"><label>وصف اللوحة</label><textarea id="panelDescription"></textarea></div>
-                <div class="field"><label>صورة اللوحة</label><input id="panelImage"></div>
-                <div class="field"><label>صورة التذكرة</label><input id="ticketImage"></div>
+            <section class="panel" id="aliases">
+                <h2>اختصارات الأوامر</h2>
+                <div id="aliasesContainer"></div>
+            </section>
+            <section class="panel" id="rolepoints">
+                <h2>نقاط الرتب بالأمر</h2>
+                <div id="rolePointsContainer"></div>
+                <button type="button" class="btn-sm btn-add" onclick="addRolePointConfig()">+ اضافة رتبه</button>
             </section>
             <section class="panel" id="autoreplies">
                 <h2>الرد التلقائي</h2>
                 <div id="autoReplyContainer"></div>
                 <button type="button" class="btn-sm btn-add" onclick="addAutoReply()">+ ضيف رد جديد</button>
-            </section>
-            <section class="panel" id="rolepoints">
-                <h2>نقاط الرتب بالأمر</h2>
-                <p class="help">اختر الرتبة، ثم اختر الأمر المحدد، ثم حدد النقاط الخاصة به.</p>
-                <div id="rolePointsContainer"></div>
-                <button type="button" class="btn-sm btn-add" onclick="addRolePointConfig()">+ اضافة رتبه</button>
-            </section>
-            <section class="panel" id="points">
-                <h2>المهلة</h2>
-                <div class="field"><label>مهلة إعادة تسمية التذكرة بالدقائق</label><input id="renameCooldown" type="number"></div>
             </section>
             <div class="savebar">
                 <button class="save" id="saveButton">حفظ الإعدادات</button>
@@ -607,7 +486,7 @@ input,textarea,select{width:100%;padding:11px 12px;border:1px solid #3a3e52;bord
 <script>
 (function () {
     const guildId = ${JSON.stringify(guildId)};
-    let roles = [], autoRepliesData = [], rolePointsData = [];
+    let roles = [], commandAliasesData = {}, rolePointsData = [], autoRepliesData = [];
     const commandsList = [
         { id: 'claim', name: 'استلام (claim)' },
         { id: 'timeout', name: 'تايم أوت (timeout)' },
@@ -630,22 +509,25 @@ input,textarea,select{width:100%;padding:11px 12px;border:1px solid #3a3e52;bord
         return String(str || '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
     }
 
-    function renderAutoReplies() {
-        const c = document.getElementById('autoReplyContainer');
+    function renderAliases() {
+        const c = document.getElementById('aliasesContainer');
         c.innerHTML = '';
-        autoRepliesData.forEach((item, idx) => {
-            let opts = '<option value="all" ' + (item.roleId === 'all' ? 'selected' : '') + '>الجميع</option>';
-            roles.forEach(r => { opts += '<option value="' + r.id + '" ' + (item.roleId === r.id ? 'selected' : '') + '>' + escapeHtml(r.name) + '</option>'; });
+        for (const [cmd, list] of Object.entries(commandAliasesData)) {
             const d = document.createElement('div');
             d.className = 'alias-card';
-            d.innerHTML = \`<div class="field"><label>الكلمة</label><input value="\${escapeHtml(item.trigger)}" onchange="autoRepliesData[\${idx}].trigger=this.value"></div>
-                <div class="field"><label>الرد</label><textarea onchange="autoRepliesData[\${idx}].reply=this.value">\${escapeHtml(item.reply)}</textarea></div>
-                <div class="field"><label>الرتبة</label><select onchange="autoRepliesData[\${idx}].roleId=this.value">\${opts}</select></div>
-                <button type="button" class="btn-sm btn-danger" onclick="autoRepliesData.splice(\${idx},1);renderAutoReplies()">حذف</button>\`;
+            let aliasesHtml = '';
+            if (Array.isArray(list)) {
+                list.forEach((item, idx) => {
+                    aliasesHtml += \`<div style="display:flex;gap:8px;margin-bottom:8px">
+                        <input value="\${escapeHtml(item.alias)}" onchange="commandAliasesData['\${cmd}'][$\{{idx}}].alias=this.value">
+                        <label style="display:flex;align-items:center;gap:4px"><input type="checkbox" \${item.active ? 'checked' : ''} onchange="commandAliasesData['\${cmd}'][$\{{idx}}].active=this.checked"> تفعيل</label>
+                    </div>\`;
+                });
+            }
+            d.innerHTML = \`<strong>الأمر: \${cmd}</strong><div style="margin-top:8px">\${aliasesHtml}</div>\`;
             c.appendChild(d);
-        });
+        }
     }
-    window.addAutoReply = () => { autoRepliesData.push({ trigger: '', reply: '', roleId: 'all' }); renderAutoReplies(); };
 
     function renderRolePoints() {
         const c = document.getElementById('rolePointsContainer');
@@ -666,39 +548,55 @@ input,textarea,select{width:100%;padding:11px 12px;border:1px solid #3a3e52;bord
     }
     window.addRolePointConfig = () => { rolePointsData.push({ roleId: '', command: 'claim', points: 1 }); renderRolePoints(); };
 
+    function renderAutoReplies() {
+        const c = document.getElementById('autoReplyContainer');
+        c.innerHTML = '';
+        autoRepliesData.forEach((item, idx) => {
+            let opts = '<option value="all" ' + (item.roleId === 'all' ? 'selected' : '') + '>الجميع</option>';
+            roles.forEach(r => { opts += '<option value="' + r.id + '" ' + (item.roleId === r.id ? 'selected' : '') + '>' + escapeHtml(r.name) + '</option>'; });
+            const d = document.createElement('div');
+            d.className = 'alias-card';
+            d.innerHTML = \`<div class="field"><label>الكلمة</label><input value="\${escapeHtml(item.trigger)}" onchange="autoRepliesData[\${idx}].trigger=this.value"></div>
+                <div class="field"><label>الرد</label><textarea onchange="autoRepliesData[\${idx}].reply=this.value">\${escapeHtml(item.reply)}</textarea></div>
+                <div class="field"><label>الرتبة</label><select onchange="autoRepliesData[\${idx}].roleId=this.value">\${opts}</select></div>
+                <button type="button" class="btn-sm btn-danger" onclick="autoRepliesData.splice(\${idx},1);renderAutoReplies()">حذف</button>\`;
+            c.appendChild(d);
+        });
+    }
+    window.addAutoReply = () => { autoRepliesData.push({ trigger: '', reply: '', roleId: 'all' }); renderAutoReplies(); };
+
     async function load() {
         const [sRes, rRes] = await Promise.all([
             fetch('/api/settings/' + guildId).then(r => r.json()),
             fetch('/api/roles/' + guildId).then(r => r.json()).catch(() => [])
         ]);
         roles = Array.isArray(rRes) ? rRes : [];
-        autoRepliesData = sRes.autoReplies || [];
+        commandAliasesData = sRes.commandAliases || {};
         rolePointsData = sRes.rolePointsConfig || [];
+        autoRepliesData = sRes.autoReplies || [];
 
-        ['botName','botAvatar','activityText','staffRoleId','ticketCategoryId','logChannelId','panelTitle','panelDescription','panelImage','ticketImage','renameCooldown','prefix'].forEach(k => {
+        ['prefix','botName','botAvatar','activityText','staffRoleId','ticketCategoryId','logChannelId'].forEach(k => {
             if (sRes[k] !== undefined) document.getElementById(k).value = sRes[k];
         });
-        renderAutoReplies();
+        renderAliases();
         renderRolePoints();
+        renderAutoReplies();
     }
 
     document.getElementById('saveButton').onclick = async function() {
         this.disabled = true;
         document.getElementById('status').textContent = 'جارٍ الحفظ...';
         const payload = {
+            prefix: document.getElementById('prefix').value,
             botName: document.getElementById('botName').value,
             botAvatar: document.getElementById('botAvatar').value,
             activityText: document.getElementById('activityText').value,
             staffRoleId: document.getElementById('staffRoleId').value,
             ticketCategoryId: document.getElementById('ticketCategoryId').value,
             logChannelId: document.getElementById('logChannelId').value,
-            panelTitle: document.getElementById('panelTitle').value,
-            panelDescription: document.getElementById('panelDescription').value,
-            panelImage: document.getElementById('panelImage').value,
-            ticketImage: document.getElementById('ticketImage').value,
-            renameCooldown: Number(document.getElementById('renameCooldown').value),
-            autoReplies: autoRepliesData,
-            rolePointsConfig: rolePointsData
+            commandAliases: commandAliasesData,
+            rolePointsConfig: rolePointsData,
+            autoReplies: autoRepliesData
         };
         const res = await fetch('/api/settings/' + guildId, {
             method: 'POST',
@@ -715,7 +613,7 @@ input,textarea,select{width:100%;padding:11px 12px;border:1px solid #3a3e52;bord
 </body>
 </html>`);
     } catch {
-        return res.status(500).send('حدث خطأ.');
+        return res.status(500).send('خطأ.');
     }
 });
 

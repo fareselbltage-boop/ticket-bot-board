@@ -25,6 +25,71 @@ if (!MONGO_URI) {
         .catch(error => console.error('MongoDB Error:', error.message));
 }
 
+const DEFAULT_RANK_PROMOTIONS = [
+  // صغرى (50 نقطة)
+  { roleId: '1537865308218593321', requiredPoints: 50 },
+  { roleId: '1537865312156786839', requiredPoints: 50 },
+  { roleId: '1537865315453636639', requiredPoints: 50 },
+  { roleId: '1537865318544703579', requiredPoints: 50 },
+  { roleId: '1537865326237196338', requiredPoints: 50 },
+  { roleId: '1537865329269674006', requiredPoints: 50 },
+  { roleId: '1537865332876902450', requiredPoints: 50 },
+  { roleId: '1537865340141309972', requiredPoints: 50 },
+  { roleId: '1537865322839810098', requiredPoints: 50 },
+  { roleId: '1537865336227889173', requiredPoints: 50 },
+  { roleId: '1537865348374732870', requiredPoints: 50 },
+  { roleId: '1537865344062980167', requiredPoints: 50 },
+  { roleId: '1545006971898437752', requiredPoints: 50 },
+  { roleId: '1545006979389329529', requiredPoints: 50 },
+  { roleId: '1545006986771439626', requiredPoints: 50 },
+  { roleId: '1545006999937355786', requiredPoints: 50 },
+  { roleId: '1545007013686415430', requiredPoints: 50 },
+  { roleId: '1545341054096769034', requiredPoints: 50 },
+  { roleId: '1545007036234731550', requiredPoints: 50 },
+  { roleId: '1545007026957066250', requiredPoints: 50 },
+  // وسطى (60 نقطة)
+  { roleId: '1537865497146556508', requiredPoints: 60 },
+  { roleId: '1537865477156765816', requiredPoints: 60 },
+  { roleId: '1537865483850879077', requiredPoints: 60 },
+  { roleId: '1537865385473347724', requiredPoints: 60 },
+  { roleId: '1537865469053378570', requiredPoints: 60 },
+  { roleId: '1537865358021759037', requiredPoints: 60 },
+  { roleId: '1545341065660465162', requiredPoints: 60 },
+  { roleId: '1545341077781872641', requiredPoints: 60 },
+  { roleId: '1545341084366798889', requiredPoints: 60 },
+  { roleId: '1545341516913053707', requiredPoints: 60 },
+  { roleId: '1545341619237031986', requiredPoints: 60 },
+  { roleId: '1545341596168622100', requiredPoints: 60 },
+  { roleId: '1545341587691806770', requiredPoints: 60 },
+  { roleId: '1545341536051531826', requiredPoints: 60 },
+  // عليا (70 نقطة)
+  { roleId: '1537865227088175166', requiredPoints: 70 },
+  { roleId: '1537865221689974895', requiredPoints: 70 },
+  { roleId: '1537865217831346326', requiredPoints: 70 },
+  { roleId: '1537865197983629353', requiredPoints: 70 },
+  { roleId: '1537865194393313430', requiredPoints: 70 },
+  { roleId: '1544817242989002853', requiredPoints: 70 },
+  { roleId: '1544817233987903498', requiredPoints: 70 },
+  { roleId: '1544817222382264400', requiredPoints: 70 },
+  { roleId: '1544817204779028490', requiredPoints: 70 },
+  { roleId: '1544817197074087956', requiredPoints: 70 },
+  { roleId: '1544817189423681577', requiredPoints: 70 },
+  { roleId: '1544817165910155404', requiredPoints: 70 },
+  { roleId: '1544817157337124864', requiredPoints: 70 },
+  { roleId: '1544817173782863952', requiredPoints: 70 },
+  { roleId: '1537865451693015172', requiredPoints: 70 },
+  { roleId: '1545006883340025997', requiredPoints: 70 },
+  { roleId: '1544817181789786255', requiredPoints: 70 },
+  { roleId: '1545006942437638194', requiredPoints: 70 },
+  { roleId: '1545006958560411728', requiredPoints: 70 },
+  { roleId: '1545006950104829983', requiredPoints: 70 },
+  { roleId: '1545006934833500190', requiredPoints: 70 },
+  { roleId: '1545006926642028554', requiredPoints: 70 },
+  { roleId: '1545006965443268608', requiredPoints: 70 },
+  // أونر (100 نقطة)
+  { roleId: '1537865161103118538', requiredPoints: 100 }
+];
+
 const defaultOptions = [
     { label: 'استفسار', value: 'inquiry', emoji: '1493382115318960169', description: 'للاستفسارات العامة والأسئلة' },
     { label: 'شكوى', value: 'complaint', emoji: '1545031336274960384', description: 'تقديم شكوى إدارية' },
@@ -70,7 +135,7 @@ const GuildSettings = mongoose.models.GuildSettings || mongoose.model(
         selectOptions: { type: Array, default: defaultOptions },
         autoReplies: { type: Array, default: [] },
         rolePointsConfig: { type: Array, default: [] },
-        rankPromotions: { type: Array, default: [] },
+        rankPromotions: { type: Array, default: DEFAULT_RANK_PROMOTIONS },
         commandPermissions: { type: Map, of: [String], default: {} },
         commandAliases: {
             type: Map,
@@ -110,11 +175,6 @@ app.use(session({
     }
 }));
 
-const COMMANDS = [
-    'add', 'come', 'rename', 'claim', 'timeout', 'untimeout',
-    'warn', 'unwarn', 'warnings', 'close', 'delete', 'addpoints', 'removepoints', 'resettop'
-];
-
 const COMMAND_NAMES = {
     add: 'إضافة عضو (add)',
     come: 'استدعاء إداري (come)',
@@ -133,11 +193,11 @@ const COMMAND_NAMES = {
 };
 
 const POINT_COMMANDS = {
-    claim: 'استلام التكت (claim)',
-    warn: 'تحذير عضو (warn)',
-    unwarn: 'إزالة تحذير (unwarn)',
-    timeout: 'تايم أوت (timeout)',
-    close: 'إغلاق التكت (close)'
+    claim: 'استلام التكت (5 نقاط)',
+    warn: 'تحذير عضو (2 نقاط)',
+    unwarn: 'إزالة تحذير (1 نقطة)',
+    timeout: 'تايم أوت (3 نقاط)',
+    close: 'إغلاق التكت (1 نقطة)'
 };
 
 const ALLOWED_FIELDS = [
@@ -998,7 +1058,7 @@ textarea{min-height:90px;resize:vertical}
                     <select class="rank-select">\${roleOptionsHtml}</select>
                 </div>
                 <div class="field">
-                    <label>النقاط المطلوبة للترقية لهذه الرتبة</label>
+                    <label>النقاط المطلوبة للترقية للرتبة التالية</label>
                     <input type="number" class="rank-points" min="1" max="10000" value="\${item.requiredPoints || 50}">
                 </div>
                 <button type="button" class="btn-sm btn-danger" onclick="deleteRankPromotion(\${index})">حذف هذه الدرجة</button>
@@ -1069,7 +1129,7 @@ textarea{min-height:90px;resize:vertical}
 
     window.addRolePointConfig = function() {
         syncRolePointsFromDOM();
-        rolePointsData.push({ roleId: '', commands: { claim: 1, warn: 1, unwarn: 1, timeout: 1, close: 1 } });
+        rolePointsData.push({ roleId: '', commands: { claim: 5, warn: 2, unwarn: 1, timeout: 3, close: 1 } });
         renderRolePoints();
     };
 

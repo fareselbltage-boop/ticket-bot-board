@@ -79,9 +79,11 @@ const GuildSettings = mongoose.models.GuildSettings || mongoose.model(
         claimPoints: { type: Number, default: 1 },
         warnPoints: { type: Number, default: 1 },
         timeoutPoints: { type: Number, default: 1 },
+        closePoints: { type: Number, default: 1 }, // نقاط الإغلاق الافتراضية
         renameCooldown: { type: Number, default: 10 },
         selectOptions: { type: Array, default: defaultOptions },
         autoReplies: { type: Array, default: [] },
+        rolePointsConfig: { type: Array, default: [] },
         commandPermissions: { type: Map, of: [String], default: {} },
         commandAliases: {
             type: Map,
@@ -145,8 +147,8 @@ const ALLOWED_FIELDS = [
     'prefix', 'staffRoleId', 'ticketCategoryId', 'logChannelId',
     'panelImage', 'ticketImage', 'panelTitle', 'panelDescription',
     'botName', 'botAvatar', 'botStatus', 'activityType', 'activityText',
-    'claimPoints', 'warnPoints', 'timeoutPoints', 'renameCooldown',
-    'selectOptions', 'autoReplies', 'commandPermissions', 'commandAliases'
+    'claimPoints', 'warnPoints', 'timeoutPoints', 'closePoints', 'renameCooldown',
+    'selectOptions', 'autoReplies', 'rolePointsConfig', 'commandPermissions', 'commandAliases'
 ];
 
 function validSnowflake(value) {
@@ -674,6 +676,7 @@ app.post('/api/settings/:guildId', requireLogin, async (req, res) => {
                 'claimPoints',
                 'warnPoints',
                 'timeoutPoints',
+                'closePoints',
                 'renameCooldown'
             ].includes(key)) {
                 const number = Number(value);
@@ -734,6 +737,20 @@ app.post('/api/settings/:guildId', requireLogin, async (req, res) => {
                     }
                 }
                 updates.autoReplies = cleanReplies;
+            } else if (key === 'rolePointsConfig') {
+                if (!Array.isArray(value)) {
+                    return res.status(400).json({ error: 'بيانات نقاط الرتب غير صحيحة.' });
+                }
+                const cleanConfigs = [];
+                for (const item of value) {
+                    if (!item || typeof item !== 'object') continue;
+                    const roleId = String(item.roleId || '').trim();
+                    const points = Number(item.points);
+                    if (validSnowflake(roleId) && Number.isInteger(points) && points >= 0) {
+                        cleanConfigs.push({ roleId, points });
+                    }
+                }
+                updates.rolePointsConfig = cleanConfigs;
             } else if (key === 'commandPermissions' || key === 'commandAliases') {
                 if (!value || typeof value !== 'object' || Array.isArray(value)) {
                     return res.status(400).json({ error: `بيانات ${key} غير صحيحة.` });
@@ -906,6 +923,7 @@ textarea{min-height:90px;resize:vertical}
             <button data-tab="panel">لوحة التذاكر</button>
             <button data-tab="options">خيارات التذاكر</button>
             <button data-tab="autoreplies">الرد التلقائي</button>
+            <button data-tab="rolepoints">نقاط الرتب</button>
             <button data-tab="aliases">البادئة والاختصارات</button>
             <button data-tab="permissions">صلاحيات الأوامر</button>
             <button data-tab="points">النقاط والمهلة</button>
@@ -994,6 +1012,13 @@ textarea{min-height:90px;resize:vertical}
                 <button type="button" class="btn-sm btn-add" style="margin-top:10px;padding:10px 16px;font-size:14px;" onclick="addAutoReply()">+ ضيف رد جديد</button>
             </section>
 
+            <section class="panel" id="rolepoints">
+                <h2>نقاط الرتب المخصصة</h2>
+                <p class="help">اضغط على "اضافة رتبه" وحدد عدد النقاط التي يكتسبها حامل هذه الرتبة عند تنفيذ الأوامر (تستطيع جعل الإدارة العليا بنقاط أعلى والإدارة الصغرى بنقاط أقل).</p>
+                <div id="rolePointsContainer"></div>
+                <button type="button" class="btn-sm btn-add" style="margin-top:10px;padding:10px 16px;font-size:14px;" onclick="addRolePointConfig()">+ اضافة رتبه</button>
+            </section>
+
             <section class="panel" id="aliases">
                 <h2>البادئة والاختصارات</h2>
                 <div class="field">
@@ -1013,9 +1038,10 @@ textarea{min-height:90px;resize:vertical}
             <section class="panel" id="points">
                 <h2>النقاط والمهلة</h2>
                 <div class="grid">
-                    <div class="field"><label for="claimPoints">نقاط الاستلام</label><input id="claimPoints" type="number" min="0" max="1000"></div>
-                    <div class="field"><label for="warnPoints">نقاط التحذير</label><input id="warnPoints" type="number" min="0" max="1000"></div>
-                    <div class="field"><label for="timeoutPoints">نقاط التايم</label><input id="timeoutPoints" type="number" min="0" max="1000"></div>
+                    <div class="field"><label for="claimPoints">نقاط الاستلام (الافتراضية)</label><input id="claimPoints" type="number" min="0" max="1000"></div>
+                    <div class="field"><label for="warnPoints">نقاط التحذير (الافتراضية)</label><input id="warnPoints" type="number" min="0" max="1000"></div>
+                    <div class="field"><label for="timeoutPoints">نقاط التايم (الافتراضية)</label><input id="timeoutPoints" type="number" min="0" max="1000"></div>
+                    <div class="field"><label for="closePoints">نقاط الإغلاق (الافتراضية)</label><input id="closePoints" type="number" min="0" max="1000"></div>
                     <div class="field"><label for="renameCooldown">مهلة إعادة تسمية التذكرة بالدقائق</label><input id="renameCooldown" type="number" min="0" max="1440"></div>
                 </div>
                 <p class="help">تأثير النقاط والمهلة يعتمد على أن كود البوت يقرأ هذه الإعدادات من قاعدة البيانات.</p>
@@ -1038,6 +1064,7 @@ textarea{min-height:90px;resize:vertical}
     let roles = [];
     let aliasesData = {};
     let autoRepliesData = [];
+    let rolePointsData = [];
 
     document.querySelectorAll('#tabs button').forEach(function (button) {
         button.addEventListener('click', function () {
@@ -1121,6 +1148,62 @@ textarea{min-height:90px;resize:vertical}
     window.deleteAutoReply = function(idx) {
         autoRepliesData.splice(idx, 1);
         renderAutoReplies();
+    };
+
+    function renderRolePoints() {
+        const container = document.getElementById('rolePointsContainer');
+        container.innerHTML = '';
+
+        if (!rolePointsData.length) {
+            container.innerHTML = '<div class="empty" style="margin-bottom:12px;">لا توجد رتب مخصصة بنقاط حالياً. يتم استخدام النقاط الافتراضية.</div>';
+            return;
+        }
+
+        rolePointsData.forEach(function (item, index) {
+            const card = document.createElement('div');
+            card.className = 'alias-card';
+
+            let roleOptionsHtml = '<option value="">-- اختر الرتبة --</option>';
+            roles.forEach(function (role) {
+                const selected = item.roleId === role.id ? 'selected' : '';
+                roleOptionsHtml += '<option value="' + role.id + '" ' + selected + '>' + escapeHtml(role.name) + '</option>';
+            });
+
+            card.innerHTML = \`
+                <div class="field">
+                    <label>اختر الرتبة (الإدارة العليا / الصغرى)</label>
+                    <select onchange="updateRolePoint(\${index}, 'roleId', this.value)">
+                        \${roleOptionsHtml}
+                    </select>
+                </div>
+                <div class="field">
+                    <label>عدد النقاط التي يكتسبها صاحب هذه الرتبة عند تنفيذ الأوامر</label>
+                    <input type="number" min="0" max="1000" value="\${item.points ?? 1}" onchange="updateRolePoint(\${index}, 'points', this.value)">
+                </div>
+                <button type="button" class="btn-sm btn-danger" onclick="deleteRolePoint(\${index})">حذف الرتبة</button>
+            \`;
+            container.appendChild(card);
+        });
+    }
+
+    window.addRolePointConfig = function() {
+        rolePointsData.push({ roleId: '', points: 1 });
+        renderRolePoints();
+    };
+
+    window.updateRolePoint = function(idx, field, val) {
+        if (rolePointsData[idx]) {
+            if (field === 'points') {
+                rolePointsData[idx][field] = Number(val) || 0;
+            } else {
+                rolePointsData[idx][field] = val.trim();
+            }
+        }
+    };
+
+    window.deleteRolePoint = function(idx) {
+        rolePointsData.splice(idx, 1);
+        renderRolePoints();
     };
 
     function escapeHtml(str) {
@@ -1246,7 +1329,7 @@ textarea{min-height:90px;resize:vertical}
             'botName', 'botAvatar', 'botStatus', 'activityType', 'activityText',
             'staffRoleId', 'ticketCategoryId', 'logChannelId', 'panelTitle',
             'panelDescription', 'panelImage', 'ticketImage', 'prefix',
-            'claimPoints', 'warnPoints', 'timeoutPoints', 'renameCooldown'
+            'claimPoints', 'warnPoints', 'timeoutPoints', 'closePoints', 'renameCooldown'
         ];
 
         textFields.forEach(function (key) {
@@ -1266,6 +1349,7 @@ textarea{min-height:90px;resize:vertical}
         }
 
         autoRepliesData = Array.isArray(settings.autoReplies) ? settings.autoReplies : [];
+        rolePointsData = Array.isArray(settings.rolePointsConfig) ? settings.rolePointsConfig : [];
 
         aliasesData = settings.commandAliases || {};
         Object.keys(commandNames).forEach(function(cmd) {
@@ -1277,6 +1361,7 @@ textarea{min-height:90px;resize:vertical}
         });
 
         renderAutoReplies();
+        renderRolePoints();
         renderAliases();
         makePermissionFields(settings);
     }
@@ -1384,12 +1469,14 @@ textarea{min-height:90px;resize:vertical}
             ticketImage: getValue('ticketImage').trim(),
             selectOptions: collectOptions(),
             autoReplies: autoRepliesData,
+            rolePointsConfig: rolePointsData,
             prefix: getValue('prefix'),
             commandAliases: aliasesData,
             commandPermissions: collectPermissions(),
             claimPoints: Number(getValue('claimPoints')),
             warnPoints: Number(getValue('warnPoints')),
             timeoutPoints: Number(getValue('timeoutPoints')),
+            closePoints: Number(getValue('closePoints')),
             renameCooldown: Number(getValue('renameCooldown'))
         };
 

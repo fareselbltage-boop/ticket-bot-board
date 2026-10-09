@@ -53,7 +53,7 @@ const GuildSettings = mongoose.models.GuildSettings || mongoose.model(
         ticketCategoryId: { type: String, default: '1555176022352208012' },
         logChannelId: { type: String, default: '1555488444182962216' },
         panelImage: { type: String, default: 'https://i.postimg.cc/j5x6JgQH/Untitled900-20260927182744.jpg' },
-        ticketImage: { type: String, default: 'https://i.postimg.cc/j5x6JgQH/Untitled900-20260927182744.jpg
+        ticketImage: { type: String, default: 'https://i.postimg.cc/j5x6JgQH/Untitled900-20260927182744.jpg' },
             async function isAuthorizedGuild(req, guildId, forceRefresh = false) {
     const guilds = await getFreshUserGuilds(req, forceRefresh);
     const isOwner = String(req.session.user?.id || '') === OWNER_DISCORD_ID;

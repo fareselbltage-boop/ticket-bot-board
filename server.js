@@ -70,6 +70,7 @@ const GuildSettings = mongoose.models.GuildSettings || mongoose.model(
         selectOptions: { type: Array, default: defaultOptions },
         autoReplies: { type: Array, default: [] },
         rolePointsConfig: { type: Array, default: [] },
+        rankPromotions: { type: Array, default: [] },
         commandPermissions: { type: Map, of: [String], default: {} },
         commandAliases: {
             type: Map,
@@ -144,7 +145,7 @@ const ALLOWED_FIELDS = [
     'panelImage', 'ticketImage', 'panelTitle', 'panelDescription',
     'botName', 'botAvatar', 'botStatus', 'activityType', 'activityText',
     'renameCooldown', 'selectOptions', 'autoReplies', 'rolePointsConfig',
-    'commandPermissions', 'commandAliases'
+    'rankPromotions', 'commandPermissions', 'commandAliases'
 ];
 
 function validSnowflake(value) {
@@ -630,6 +631,20 @@ app.post('/api/settings/:guildId', requireLogin, async (req, res) => {
                     }
                 }
                 updates.rolePointsConfig = cleanConfigs;
+            } else if (key === 'rankPromotions') {
+                if (!Array.isArray(value)) {
+                    return res.status(400).json({ error: 'بيانات سلم الترقيات غير صحيحة.' });
+                }
+                const cleanPromotions = [];
+                for (const item of value) {
+                    if (!item || typeof item !== 'object') continue;
+                    const roleId = String(item.roleId || '').trim();
+                    const requiredPoints = Number(item.requiredPoints) >= 0 ? Number(item.requiredPoints) : 50;
+                    if (validSnowflake(roleId)) {
+                        cleanPromotions.push({ roleId, requiredPoints });
+                    }
+                }
+                updates.rankPromotions = cleanPromotions;
             } else if (key === 'commandPermissions' || key === 'commandAliases') {
                 updates[key] = value;
             }
@@ -761,6 +776,7 @@ textarea{min-height:90px;resize:vertical}
             <button data-tab="options">خيارات التذاكر</button>
             <button data-tab="autoreplies">الرد التلقائي</button>
             <button data-tab="rolepoints">نقاط الرتب</button>
+            <button data-tab="rankpromotions">سلم الترقيات</button>
             <button data-tab="aliases">البادئة والاختصارات</button>
             <button data-tab="permissions">صلاحيات الأوامر</button>
             <button data-tab="points">المهلة الزمانية</button>
@@ -852,6 +868,13 @@ textarea{min-height:90px;resize:vertical}
                 <button type="button" class="btn-sm btn-add" style="margin-top:10px;padding:10px 16px;font-size:14px;" onclick="addRolePointConfig()">+ إضافة رتبة نقاط جديد</button>
             </section>
 
+            <section class="panel" id="rankpromotions">
+                <h2>سلم الترقيات التلقائي بالنقاط</h2>
+                <p class="help">قم بإضافة الرتب بالتدرّج (من أدنى رتبة إلى أعلى رتبة). وحدد النقاط المطلوب الوصول إليها للترقية للرتبة التالية.</p>
+                <div id="rankPromotionsContainer"></div>
+                <button type="button" class="btn-sm btn-add" style="margin-top:10px;padding:10px 16px;font-size:14px;" onclick="addRankPromotion()">+ إضافة رتبة في سلم الترقيات</button>
+            </section>
+
             <section class="panel" id="aliases">
                 <h2>البادئة والاختصارات</h2>
                 <div class="field">
@@ -890,6 +913,7 @@ textarea{min-height:90px;resize:vertical}
     let aliasesData = {};
     let autoRepliesData = [];
     let rolePointsData = [];
+    let rankPromotionsData = [];
 
     document.querySelectorAll('#tabs button').forEach(function (button) {
         button.addEventListener('click', function () {
@@ -937,6 +961,64 @@ textarea{min-height:90px;resize:vertical}
             });
         });
     }
+
+    function syncRankPromotionsFromDOM() {
+        document.querySelectorAll('#rankPromotionsContainer .alias-card').forEach((card, idx) => {
+            if (!rankPromotionsData[idx]) return;
+            const select = card.querySelector('.rank-select');
+            const pointsInput = card.querySelector('.rank-points');
+            if (select) rankPromotionsData[idx].roleId = select.value;
+            if (pointsInput) rankPromotionsData[idx].requiredPoints = Number(pointsInput.value) || 50;
+        });
+    }
+
+    function renderRankPromotions() {
+        const container = document.getElementById('rankPromotionsContainer');
+        container.innerHTML = '';
+
+        if (!rankPromotionsData.length) {
+            container.innerHTML = '<div class="empty" style="margin-bottom:12px;">لم يتم إضافة سلم ترقيات بعد.</div>';
+            return;
+        }
+
+        rankPromotionsData.forEach(function (item, index) {
+            const card = document.createElement('div');
+            card.className = 'alias-card';
+
+            let roleOptionsHtml = '<option value="">-- اختر الرتبة --</option>';
+            roles.forEach(function (role) {
+                const selected = item.roleId === role.id ? 'selected' : '';
+                roleOptionsHtml += '<option value="' + role.id + '" ' + selected + '>' + escapeHtml(role.name) + '</option>';
+            });
+
+            card.innerHTML = \`
+                <div style="font-weight:bold;margin-bottom:10px;color:#737eff;">الدرجة رقم \${index + 1} في السلم الإداري</div>
+                <div class="field">
+                    <label>الرتبة الإدارية</label>
+                    <select class="rank-select">\${roleOptionsHtml}</select>
+                </div>
+                <div class="field">
+                    <label>النقاط المطلوبة للترقية لهذه الرتبة</label>
+                    <input type="number" class="rank-points" min="1" max="10000" value="\${item.requiredPoints || 50}">
+                </div>
+                <button type="button" class="btn-sm btn-danger" onclick="deleteRankPromotion(\${index})">حذف هذه الدرجة</button>
+            \`;
+
+            container.appendChild(card);
+        });
+    }
+
+    window.addRankPromotion = function() {
+        syncRankPromotionsFromDOM();
+        rankPromotionsData.push({ roleId: '', requiredPoints: 50 });
+        renderRankPromotions();
+    };
+
+    window.deleteRankPromotion = function(idx) {
+        syncRankPromotionsFromDOM();
+        rankPromotionsData.splice(idx, 1);
+        renderRankPromotions();
+    };
 
     function renderRolePoints() {
         const container = document.getElementById('rolePointsContainer');
@@ -1179,6 +1261,7 @@ textarea{min-height:90px;resize:vertical}
 
         autoRepliesData = Array.isArray(settings.autoReplies) ? settings.autoReplies : [];
         rolePointsData = Array.isArray(settings.rolePointsConfig) ? settings.rolePointsConfig : [];
+        rankPromotionsData = Array.isArray(settings.rankPromotions) ? settings.rankPromotions : [];
 
         aliasesData = settings.commandAliases || {};
         Object.keys(commandNames).forEach(function(cmd) {
@@ -1187,6 +1270,7 @@ textarea{min-height:90px;resize:vertical}
 
         renderAutoReplies();
         renderRolePoints();
+        renderRankPromotions();
         renderAliases();
         makePermissionFields(settings);
     }
@@ -1230,6 +1314,7 @@ textarea{min-height:90px;resize:vertical}
 
     document.getElementById('saveButton').addEventListener('click', async function () {
         syncRolePointsFromDOM();
+        syncRankPromotionsFromDOM();
 
         const button = this;
         const status = document.getElementById('status');
@@ -1252,6 +1337,7 @@ textarea{min-height:90px;resize:vertical}
             selectOptions: collectOptions(),
             autoReplies: autoRepliesData,
             rolePointsConfig: rolePointsData,
+            rankPromotions: rankPromotionsData,
             prefix: getValue('prefix'),
             commandAliases: aliasesData,
             commandPermissions: collectPermissions(),

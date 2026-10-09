@@ -44,6 +44,7 @@ const defaultOptions = [
     { label: 'مشكلة تقنية', value: 'technical', emoji: '🛠', description: 'المشاكل الفنية والتقنية' }
 ];
 
+
 const GuildSettings = mongoose.models.GuildSettings || mongoose.model(
     'GuildSettings',
     new mongoose.Schema({
@@ -54,7 +55,39 @@ const GuildSettings = mongoose.models.GuildSettings || mongoose.model(
         logChannelId: { type: String, default: '1555488444182962216' },
         panelImage: { type: String, default: 'https://i.postimg.cc/j5x6JgQH/Untitled900-20260927182744.jpg' },
         ticketImage: { type: String, default: 'https://i.postimg.cc/j5x6JgQH/Untitled900-20260927182744.jpg' },
-            async function isAuthorizedGuild(req, guildId, forceRefresh = false) {
+        panelTitle: { type: String, default: '🎫 LIGHT Support | الدعم الفني' },
+        panelDescription: { type: String, default: 'مرحباً بك في نظام الدعم الفني الخاص بسيرفر LIGHT.' },
+        botName: { type: String, default: 'Light Ticket Bot' },
+        botAvatar: { type: String, default: 'https://i.postimg.cc/tJW3r0PJ/Screenshot-20261001-232609-ibis-Paint-X.jpg' },
+        botStatus: { type: String, enum: ['online', 'idle', 'dnd', 'invisible'], default: 'online' },
+        activityType: { type: Number, default: 0 },
+        activityText: { type: String, default: '-help / التذاكر' },
+        claimPoints: { type: Number, default: 1 },
+        warnPoints: { type: Number, default: 1 },
+        timeoutPoints: { type: Number, default: 1 },
+        renameCooldown: { type: Number, default: 10 },
+        selectOptions: { type: Array, default: defaultOptions },
+        commandPermissions: { type: Map, of: [String], default: {} },
+        commandAliases: {
+            type: Map,
+            of: [String],
+            default: {
+                add: ['add'],
+                come: ['come'],
+                rename: ['rename'],
+                claim: ['استلام'],
+                timeout: ['تايم'],
+                warn: ['تحذير'],
+                close: ['اغلاق'],
+                delete: ['حذف'],
+                addpoints: ['addpoints'],
+                removepoints: ['removepoints']
+            }
+        }
+    }, { timestamps: true })
+);
+
+async function isAuthorizedGuild(req, guildId, forceRefresh = false) {
     const guilds = await getFreshUserGuilds(req, forceRefresh);
     const isOwner = String(req.session.user?.id || '') === OWNER_DISCORD_ID;
 

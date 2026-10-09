@@ -1,4 +1,3 @@
-
 require('dotenv').config();
 
 const express = require('express');
@@ -9,23 +8,33 @@ const mongoose = require('mongoose');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const API = 'https://discord.com/api/v10';
 
 const REDIRECT_URI = process.env.REDIRECT_URI || 'https://ticket-bot-board.vercel.app/api/auth/callback';
 const MONGO_URI = process.env.MONGO_URI;
 const BOT_TOKEN = process.env.TOKEN;
-
 const BOT_NAME = process.env.BOT_NAME || 'Light Ticket Bot';
 const BOT_AVATAR = process.env.BOT_AVATAR || 'https://i.postimg.cc/tJW3r0PJ/Screenshot-20261001-232609-ibis-Paint-X.jpg';
 const SITE_BG = 'https://i.postimg.cc/s2x5kG7S/1791496064027.jpg';
 
-if (!MONGO_URI) {
-    console.error('MONGO_URI is missing.');
+if (!process.env.SESSION_SECRET) {
+    console.warn('WARNING: Set SESSION_SECRET in your hosting environment.');
 }
 
-if (MONGO_URI) {
+if (!process.env.CLIENT_ID || !process.env.CLIENT_SECRET) {
+    console.warn('WARNING: Discord OAuth CLIENT_ID or CLIENT_SECRET is missing.');
+}
+
+if (!BOT_TOKEN) {
+    console.warn('WARNING: TOKEN is missing.');
+}
+
+if (!MONGO_URI) {
+    console.warn('WARNING: MONGO_URI is missing.');
+} else {
     mongoose.connect(MONGO_URI)
         .then(() => console.log('MongoDB Connected in Dashboard'))
-        .catch(err => console.error('MongoDB Error:', err.message));
+        .catch(error => console.error('MongoDB Error:', error.message));
 }
 
 const defaultOptions = [
@@ -34,44 +43,47 @@ const defaultOptions = [
     { label: 'مشكلة تقنية', value: 'technical', emoji: '🛠', description: 'المشاكل الفنية والتقنية' }
 ];
 
-const GuildSettings = mongoose.models.GuildSettings || mongoose.model('GuildSettings', new mongoose.Schema({
-    guildId: { type: String, required: true, unique: true },
-    prefix: { type: String, default: '-' },
-    staffRoleId: { type: String, default: '1555478928708337775' },
-    ticketCategoryId: { type: String, default: '1555176022352208012' },
-    logChannelId: { type: String, default: '1555488444182962216' },
-    panelImage: { type: String, default: 'https://i.postimg.cc/j5x6JgQH/Untitled900-20260927182744.jpg' },
-    ticketImage: { type: String, default: 'https://i.postimg.cc/j5x6JgQH/Untitled900-20260927182744.jpg' },
-    panelTitle: { type: String, default: '🎫 LIGHT Support | الدعم الفني' },
-    panelDescription: { type: String, default: 'مرحباً بك في نظام الدعم الفني الخاص بسيرفر LIGHT.' },
-    botName: { type: String, default: 'Light Ticket Bot' },
-    botAvatar: { type: String, default: 'https://i.postimg.cc/tJW3r0PJ/Screenshot-20261001-232609-ibis-Paint-X.jpg' },
-    botStatus: { type: String, enum: ['online', 'idle', 'dnd', 'invisible'], default: 'online' },
-    activityType: { type: Number, default: 0 },
-    activityText: { type: String, default: '-help / التذاكر' },
-    claimPoints: { type: Number, default: 1 },
-    warnPoints: { type: Number, default: 1 },
-    timeoutPoints: { type: Number, default: 1 },
-    renameCooldown: { type: Number, default: 10 },
-    selectOptions: { type: Array, default: defaultOptions },
-    commandPermissions: { type: Map, of: [String], default: {} },
-    commandAliases: {
-        type: Map,
-        of: String,
-        default: {
-            add: 'add',
-            come: 'come',
-            rename: 'rename',
-            claim: 'استلام',
-            timeout: 'تايم',
-            warn: 'تحذير',
-            close: 'اغلاق',
-            delete: 'حذف',
-            addpoints: 'addpoints',
-            removepoints: 'removepoints'
+const GuildSettings = mongoose.models.GuildSettings || mongoose.model(
+    'GuildSettings',
+    new mongoose.Schema({
+        guildId: { type: String, required: true, unique: true },
+        prefix: { type: String, default: '-' },
+        staffRoleId: { type: String, default: '1555478928708337775' },
+        ticketCategoryId: { type: String, default: '1555176022352208012' },
+        logChannelId: { type: String, default: '1555488444182962216' },
+        panelImage: { type: String, default: 'https://i.postimg.cc/j5x6JgQH/Untitled900-20260927182744.jpg' },
+        ticketImage: { type: String, default: 'https://i.postimg.cc/j5x6JgQH/Untitled900-20260927182744.jpg' },
+        panelTitle: { type: String, default: '🎫 LIGHT Support | الدعم الفني' },
+        panelDescription: { type: String, default: 'مرحباً بك في نظام الدعم الفني الخاص بسيرفر LIGHT.' },
+        botName: { type: String, default: 'Light Ticket Bot' },
+        botAvatar: { type: String, default: 'https://i.postimg.cc/tJW3r0PJ/Screenshot-20261001-232609-ibis-Paint-X.jpg' },
+        botStatus: { type: String, enum: ['online', 'idle', 'dnd', 'invisible'], default: 'online' },
+        activityType: { type: Number, default: 0 },
+        activityText: { type: String, default: '-help / التذاكر' },
+        claimPoints: { type: Number, default: 1 },
+        warnPoints: { type: Number, default: 1 },
+        timeoutPoints: { type: Number, default: 1 },
+        renameCooldown: { type: Number, default: 10 },
+        selectOptions: { type: Array, default: defaultOptions },
+        commandPermissions: { type: Map, of: [String], default: {} },
+        commandAliases: {
+            type: Map,
+            of: String,
+            default: {
+                add: 'add',
+                come: 'come',
+                rename: 'rename',
+                claim: 'استلام',
+                timeout: 'تايم',
+                warn: 'تحذير',
+                close: 'اغلاق',
+                delete: 'حذف',
+                addpoints: 'addpoints',
+                removepoints: 'removepoints'
+            }
         }
-    }
-}, { timestamps: true }));
+    }, { timestamps: true })
+);
 
 app.set('trust proxy', 1);
 app.use(express.json({ limit: '100kb' }));
@@ -89,12 +101,12 @@ app.use(session({
     secret: process.env.SESSION_SECRET || 'dev-only-change-this-session-secret',
     resave: false,
     saveUninitialized: false,
-    ...(MONGO_URI ? {
-        store: MongoStore.create({
+    store: MONGO_URI
+        ? MongoStore.create({
             mongoUrl: MONGO_URI,
             ttl: 30 * 24 * 60 * 60
         })
-    } : {}),
+        : undefined,
     cookie: {
         maxAge: 30 * 24 * 60 * 60 * 1000,
         secure: process.env.NODE_ENV === 'production',
@@ -103,12 +115,23 @@ app.use(session({
     }
 }));
 
-const API = 'https://discord.com/api/v10';
-
 const COMMANDS = [
     'add', 'come', 'rename', 'claim', 'timeout',
     'warn', 'close', 'delete', 'addpoints', 'removepoints'
 ];
+
+const COMMAND_NAMES = {
+    add: 'إضافة عضو -add',
+    come: 'استدعاء إداري -come',
+    rename: 'إعادة تسمية -rename',
+    claim: 'استلام التذكرة',
+    timeout: 'تايم عضو -تايم',
+    warn: 'تحذير عضو -تحذير',
+    close: 'قفل التذكرة',
+    delete: 'حذف التذكرة',
+    addpoints: 'إضافة نقاط',
+    removepoints: 'إزالة نقاط'
+};
 
 const ALLOWED_FIELDS = [
     'prefix', 'staffRoleId', 'ticketCategoryId', 'logChannelId',
@@ -122,45 +145,85 @@ function validSnowflake(value) {
     return typeof value === 'string' && /^\d{17,20}$/.test(value);
 }
 
+function validUrl(value) {
+    if (typeof value !== 'string' || value.length > 2048) return false;
+    if (!value.trim()) return true;
+
+    try {
+        const url = new URL(value);
+        return url.protocol === 'https:' || url.protocol === 'http:';
+    } catch {
+        return false;
+    }
+}
+
+function escapeHtml(value = '') {
+    return String(value).replace(/[&<>"']/g, char => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    }[char]));
+}
+
+function plainSettings(settings) {
+    const obj = settings.toObject();
+
+    for (const key of ['commandPermissions', 'commandAliases']) {
+        if (obj[key] instanceof Map) {
+            obj[key] = Object.fromEntries(obj[key]);
+        }
+    }
+
+    return obj;
+}
+
+function requireLogin(req, res, next) {
+    if (!req.session?.user || (!req.session.accessToken && !req.session.refreshToken)) {
+        if (req.path.startsWith('/api/')) {
+            return res.status(401).json({ error: 'انتهت جلسة تسجيل الدخول. سجّل دخولك مجدداً.' });
+        }
+
+        return res.redirect('/');
+    }
+
+    next();
+}
+
 async function getFreshUserGuilds(req) {
     let accessToken = req.session.accessToken;
 
-    if (!accessToken && !req.session.refreshToken) {
-        throw new Error('Discord login required');
-    }
-
     if (req.session.refreshToken) {
         try {
-            const refreshRes = await axios.post(
+            const refreshResponse = await axios.post(
                 `${API}/oauth2/token`,
                 new URLSearchParams({
                     client_id: process.env.CLIENT_ID,
                     client_secret: process.env.CLIENT_SECRET,
                     grant_type: 'refresh_token',
                     refresh_token: req.session.refreshToken
-                }),
+                }).toString(),
                 {
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded'
-                    },
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                     timeout: 15000
                 }
             );
 
-            accessToken = refreshRes.data.access_token;
+            accessToken = refreshResponse.data.access_token;
             req.session.accessToken = accessToken;
 
-            if (refreshRes.data.refresh_token) {
-                req.session.refreshToken = refreshRes.data.refresh_token;
+            if (refreshResponse.data.refresh_token) {
+                req.session.refreshToken = refreshResponse.data.refresh_token;
             }
-        } catch (err) {
-            if (!accessToken || [400, 401].includes(err.response?.status)) {
+        } catch (error) {
+            if (!accessToken || [400, 401].includes(error.response?.status)) {
                 req.session.accessToken = null;
                 req.session.refreshToken = null;
                 throw new Error('Discord session expired');
             }
 
-            console.error('Refresh token error:', err.response?.data || err.message);
+            console.error('Refresh token error:', error.response?.data || error.message);
         }
     }
 
@@ -176,13 +239,8 @@ async function getFreshUserGuilds(req) {
     const manageableGuilds = response.data.filter(guild => {
         const permissions = BigInt(guild.permissions || '0');
 
-        return (permissions & 8n) === 8n ||
-               (permissions & 32n) === 32n;
+        return (permissions & 8n) === 8n || (permissions & 32n) === 32n;
     });
-
-    if (!BOT_TOKEN) {
-        throw new Error('Bot token is not configured');
-    }
 
     const checks = await Promise.all(
         manageableGuilds.map(async guild => {
@@ -193,11 +251,11 @@ async function getFreshUserGuilds(req) {
                 });
 
                 return guild;
-            } catch (err) {
-                if (![403, 404].includes(err.response?.status)) {
+            } catch (error) {
+                if (![403, 404].includes(error.response?.status)) {
                     console.error(
                         `Guild check failed (${guild.id}):`,
-                        err.response?.data || err.message
+                        error.response?.data || error.message
                     );
                 }
 
@@ -206,315 +264,24 @@ async function getFreshUserGuilds(req) {
         })
     );
 
-    return checks.filter(Boolean);
+    req.session.guilds = checks.filter(Boolean);
+    return req.session.guilds;
 }
 
 async function isAuthorizedGuild(req, guildId) {
-    if (!req.session.user || !validSnowflake(String(guildId))) {
+    if (!req.session?.user || !validSnowflake(String(guildId))) {
         return false;
     }
 
     const guilds = await getFreshUserGuilds(req);
-    req.session.guilds = guilds;
-
     return guilds.some(guild => String(guild.id) === String(guildId));
 }
-
-function plainSettings(settings) {
-    const obj = settings.toObject();
-
-    for (const key of ['commandPermissions', 'commandAliases']) {
-        if (obj[key] instanceof Map) {
-            obj[key] = Object.fromEntries(obj[key]);
-        }
-    }
-
-    return obj;
-}
-
-function escapeHtml(value = '') {
-    return String(value).replace(/[&<>"']/g, char => ({
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#39;'
-    }[char]));
-}
-
-function validUrl(value) {
-    if (typeof value !== 'string' || value.length > 2048) return false;
-    if (!value.trim()) return true;
-
-    try {
-        const url = new URL(value);
-        return url.protocol === 'https:' || url.protocol === 'http:';
-    } catch {
-        return false;
-    }
-}
-
-function requireLogin(req, res, next) {
-    if (!req.session || !req.session.user || !req.session.accessToken) {
-        if (req.path.startsWith('/api/')) {
-            return res.status(401).json({ error: 'سجّل دخولك أولاً.' });
-        }
-
-        return res.redirect('/');
-    }
-
-    next();
-}
-
-app.get('/api/roles/:guildId', requireLogin, async (req, res) => {
-    try {
-        const { guildId } = req.params;
-
-        if (!validSnowflake(guildId)) {
-            return res.status(400).json({ error: 'معرّف السيرفر غير صحيح.' });
-        }
-
-        if (!(await isAuthorizedGuild(req, guildId))) {
-            return res.status(403).json({ error: 'ليس لديك صلاحية إدارة هذا السيرفر أو البوت غير موجود فيه.' });
-        }
-
-        const response = await axios.get(`${API}/guilds/${guildId}/roles`, {
-            headers: { Authorization: `Bot ${BOT_TOKEN}` },
-            timeout: 15000
-        });
-
-        const roles = response.data
-            .filter(role => role.id !== guildId && !role.managed)
-            .map(role => ({
-                id: role.id,
-                name: role.name,
-                color: role.color
-            }));
-
-        res.set('Cache-Control', 'no-store');
-        return res.json(roles);
-    } catch (error) {
-        console.error('Roles API error:', error.response?.data || error.message);
-        return res.status(500).json({ error: 'تعذّر تحميل الرتب.' });
-    }
-});
-
-app.get('/api/settings/:guildId', requireLogin, async (req, res) => {
-    try {
-        const { guildId } = req.params;
-
-        if (!validSnowflake(guildId)) {
-            return res.status(400).json({ error: 'معرّف السيرفر غير صحيح.' });
-        }
-
-        if (!(await isAuthorizedGuild(req, guildId))) {
-            return res.status(403).json({ error: 'غير مسموح لك بالوصول إلى إعدادات هذا السيرفر.' });
-        }
-
-        let settings = await GuildSettings.findOne({ guildId });
-
-        if (!settings) {
-            settings = await GuildSettings.create({ guildId });
-        }
-
-        res.set('Cache-Control', 'no-store');
-        return res.json(plainSettings(settings));
-    } catch (error) {
-        console.error('Get settings error:', error.message);
-        return res.status(500).json({ error: 'تعذّر تحميل الإعدادات.' });
-    }
-});
-
-app.post('/api/settings/:guildId', requireLogin, async (req, res) => {
-    try {
-        const { guildId } = req.params;
-
-        if (!validSnowflake(guildId)) {
-            return res.status(400).json({ error: 'معرّف السيرفر غير صحيح.' });
-        }
-
-        if (!(await isAuthorizedGuild(req, guildId))) {
-            return res.status(403).json({ error: 'غير مسموح لك بتعديل إعدادات هذا السيرفر.' });
-        }
-
-        if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
-            return res.status(400).json({ error: 'بيانات الإعدادات غير صحيحة.' });
-        }
-
-        const body = req.body;
-        const updates = {};
-
-        for (const key of Object.keys(body)) {
-            if (!ALLOWED_FIELDS.includes(key)) continue;
-            const value = body[key];
-
-            if (key === 'prefix') {
-                if (typeof value !== 'string' || value.length < 1 || value.length > 5) {
-                    return res.status(400).json({ error: 'البادئة يجب أن تكون من 1 إلى 5 أحرف.' });
-                }
-
-                updates.prefix = value;
-            } else if ([
-                'staffRoleId',
-                'ticketCategoryId',
-                'logChannelId'
-            ].includes(key)) {
-                if (typeof value !== 'string' || (value !== '' && !validSnowflake(value))) {
-                    return res.status(400).json({ error: `قيمة ${key} غير صحيحة.` });
-                }
-
-                updates[key] = value;
-            } else if ([
-                'botName',
-                'activityText',
-                'panelTitle',
-                'panelDescription',
-                'panelImage',
-                'ticketImage',
-                'botAvatar'
-            ].includes(key)) {
-                if (typeof value !== 'string' || value.length > 2000) {
-                    return res.status(400).json({ error: `قيمة ${key} غير صحيحة أو طويلة جداً.` });
-                }
-
-                if (['panelImage', 'ticketImage', 'botAvatar'].includes(key) && !validUrl(value)) {
-                    return res.status(400).json({ error: `الرابط الموجود في ${key} غير صحيح.` });
-                }
-
-                updates[key] = value;
-            } else if (key === 'botStatus') {
-                if (typeof value !== 'string' || !['online', 'idle', 'dnd', 'invisible'].includes(value)) {
-                    return res.status(400).json({ error: 'حالة البوت غير صحيحة.' });
-                }
-
-                updates.botStatus = value;
-            } else if (key === 'activityType') {
-                const number = Number(value);
-
-                if (![0, 2, 3, 5].includes(number)) {
-                    return res.status(400).json({ error: 'نوع نشاط البوت غير صحيح.' });
-                }
-
-                updates.activityType = number;
-            } else if ([
-                'claimPoints',
-                'warnPoints',
-                'timeoutPoints',
-                'renameCooldown'
-            ].includes(key)) {
-                const number = Number(value);
-                const max = key === 'renameCooldown' ? 1440 : 1000;
-
-                if (!Number.isInteger(number) || number < 0 || number > max) {
-                    return res.status(400).json({ error: `قيمة ${key} يجب أن تكون رقماً صحيحاً بين 0 و${max}.` });
-                }
-
-                updates[key] = number;
-            } else if (key === 'selectOptions') {
-                if (!Array.isArray(value) || value.length !== 3) {
-                    return res.status(400).json({ error: 'يجب تحديد 3 خيارات للتذاكر.' });
-                }
-
-                const allowedValues = ['inquiry', 'complaint', 'technical'];
-                const cleanOptions = [];
-
-                for (let i = 0; i < value.length; i++) {
-                    const option = value[i];
-
-                    if (!option || typeof option !== 'object' || Array.isArray(option)) {
-                        return res.status(400).json({ error: 'أحد خيارات التذاكر غير صحيح.' });
-                    }
-
-                    const label = typeof option.label === 'string' ? option.label.trim() : '';
-                    const description = typeof option.description === 'string' ? option.description.trim() : '';
-                    const emoji = typeof option.emoji === 'string' ? option.emoji.trim() : '';
-
-                    if (!label || label.length > 100 || description.length > 100 || emoji.length > 100) {
-                        return res.status(400).json({ error: 'راجع أسماء وأوصاف خيارات التذاكر.' });
-                    }
-
-                    cleanOptions.push({
-                        label,
-                        value: allowedValues[i],
-                        description,
-                        emoji
-                    });
-                }
-
-                updates.selectOptions = cleanOptions;
-            } else if (key === 'commandPermissions' || key === 'commandAliases') {
-                if (!value || typeof value !== 'object' || Array.isArray(value)) {
-                    return res.status(400).json({ error: `بيانات ${key} غير صحيحة.` });
-                }
-
-                const clean = {};
-
-                for (const command of COMMANDS) {
-                    if (!(command in value)) continue;
-
-                    if (key === 'commandPermissions') {
-                        if (!Array.isArray(value[command]) || value[command].length > 100) {
-                            return res.status(400).json({ error: 'قائمة صلاحيات أحد الأوامر غير صحيحة.' });
-                        }
-
-                        const ids = value[command];
-
-                        if (ids.some(id => typeof id !== 'string' || !validSnowflake(id))) {
-                            return res.status(400).json({ error: 'يوجد معرّف رتبة غير صحيح.' });
-                        }
-
-                        clean[command] = [...new Set(ids)];
-                    } else {
-                        const alias = value[command];
-
-                        if (typeof alias !== 'string' || alias.length > 32 || /\s/.test(alias)) {
-                            return res.status(400).json({ error: 'اختصار الأمر يجب أن يكون كلمة واحدة وبحد أقصى 32 حرفاً.' });
-                        }
-
-                        clean[command] = alias.trim();
-                    }
-                }
-
-                updates[key] = clean;
-            }
-        }
-
-        let settings = await GuildSettings.findOne({ guildId });
-
-        if (!settings) {
-            settings = new GuildSettings({ guildId });
-        }
-
-        for (const [key, value] of Object.entries(updates)) {
-            if (key === 'commandPermissions' || key === 'commandAliases') {
-                const targetMap = settings[key];
-
-                for (const [command, item] of Object.entries(value)) {
-                    targetMap.set(command, item);
-                }
-            } else {
-                settings.set(key, value);
-            }
-        }
-
-        await settings.save();
-
-        res.set('Cache-Control', 'no-store');
-        return res.json({
-            success: true,
-            settings: plainSettings(settings)
-        });
-    } catch (error) {
-        console.error('Save settings error:', error.response?.data || error.message);
-        return res.status(500).json({ error: 'حدث خطأ أثناء حفظ الإعدادات.' });
-    }
-});
 
 app.get('/login', (req, res) => {
     const clientId = process.env.CLIENT_ID;
 
-    if (!clientId || !REDIRECT_URI) {
-        return res.status(500).send('إعدادات تسجيل الدخول غير مكتملة.');
+    if (!clientId || !process.env.CLIENT_SECRET || !REDIRECT_URI) {
+        return res.status(500).send('إعدادات تسجيل الدخول غير مكتملة. راجع CLIENT_ID وCLIENT_SECRET وREDIRECT_URI.');
     }
 
     const params = new URLSearchParams({
@@ -605,6 +372,9 @@ app.get('/', (req, res) => {
     const botName = escapeHtml(BOT_NAME);
     const botAvatar = validUrl(BOT_AVATAR) ? BOT_AVATAR : '';
     const background = validUrl(SITE_BG) ? SITE_BG : '';
+    const loginError = req.query.error === 'login'
+        ? '<p class="error">تعذّر تسجيل الدخول. حاول مرة أخرى.</p>'
+        : '';
 
     res.set('Cache-Control', 'no-store');
 
@@ -628,6 +398,7 @@ p{color:#b9bdcd;line-height:1.8}
 a.btn{display:block;margin-top:24px;padding:14px;border-radius:12px;background:#5865f2;color:#fff;text-decoration:none;font-weight:bold}
 a.btn:hover{background:#4752c4}
 .small{font-size:13px;color:#9095a8;margin-top:22px}
+.error{color:#ffaaaa}
 </style>
 </head>
 <body>
@@ -635,8 +406,9 @@ a.btn:hover{background:#4752c4}
 ${botAvatar ? `<img class="avatar" src="${escapeHtml(botAvatar)}" alt="Bot">` : ''}
 <h1>${botName}</h1>
 <p>لوحة تحكم بوت التذاكر. سجّل دخولك باستخدام Discord لإدارة إعدادات السيرفرات التي تملك صلاحية إدارتها والبوت موجود فيها.</p>
+${loginError}
 <a class="btn" href="/login">تسجيل الدخول عبر Discord</a>
-<div class="small">تسجيل الدخول آمن عبر Discord OAuth2</div>
+<div class="small">تسجيل الدخول عبر Discord OAuth2</div>
 </div>
 </body>
 </html>`);
@@ -657,14 +429,14 @@ app.get('/dashboard', requireLogin, async (req, res) => {
                 : 'https://cdn.discordapp.com/embed/avatars/0.png';
 
             return `
-            <a class="guild" href="/dashboard/${encodeURIComponent(guild.id)}">
-                <img src="${escapeHtml(icon)}" alt="">
-                <div class="guild-info">
-                    <strong>${escapeHtml(guild.name || 'سيرفر بدون اسم')}</strong>
-                    <span>فتح لوحة التحكم</span>
-                </div>
-                <span class="arrow">←</span>
-            </a>`;
+<a class="guild" href="/dashboard/${encodeURIComponent(guild.id)}">
+    <img src="${escapeHtml(icon)}" alt="">
+    <div class="guild-info">
+        <strong>${escapeHtml(guild.name || 'سيرفر بدون اسم')}</strong>
+        <span>فتح لوحة التحكم</span>
+    </div>
+    <span class="arrow">←</span>
+</a>`;
         }).join('');
 
         res.set('Cache-Control', 'no-store');
@@ -720,11 +492,270 @@ h1{font-size:28px;margin-bottom:8px}
     } catch (error) {
         console.error('Dashboard error:', error.response?.data || error.message);
 
-        if (['Discord session expired', 'Discord login required'].includes(error.message)) {
-            return res.redirect('/');
+        if (error.message === 'Discord session expired' || error.message === 'Discord login required') {
+            return res.redirect('/?error=login');
         }
 
         return res.status(500).send('حدث خطأ أثناء تحميل السيرفرات. تأكد من إعدادات Discord OAuth وتوكن البوت.');
+    }
+});
+
+app.get('/api/roles/:guildId', requireLogin, async (req, res) => {
+    try {
+        const { guildId } = req.params;
+
+        if (!validSnowflake(guildId)) {
+            return res.status(400).json({ error: 'معرّف السيرفر غير صحيح.' });
+        }
+
+        if (!BOT_TOKEN) {
+            return res.status(500).json({ error: 'إعدادات توكن البوت غير مكتملة.' });
+        }
+
+        if (!(await isAuthorizedGuild(req, guildId))) {
+            return res.status(403).json({ error: 'ليس لديك صلاحية إدارة هذا السيرفر أو البوت غير موجود فيه.' });
+        }
+
+        const response = await axios.get(`${API}/guilds/${guildId}/roles`, {
+            headers: { Authorization: `Bot ${BOT_TOKEN}` },
+            timeout: 15000
+        });
+
+        const roles = response.data
+            .filter(role => role.id !== guildId && !role.managed)
+            .map(role => ({
+                id: role.id,
+                name: role.name,
+                color: role.color
+            }));
+
+        res.set('Cache-Control', 'no-store');
+        return res.json(roles);
+    } catch (error) {
+        console.error('Roles API error:', error.response?.data || error.message);
+
+        if ([400, 401].includes(error.response?.status)) {
+            return res.status(401).json({ error: 'انتهت جلسة Discord. سجّل الدخول مجدداً.' });
+        }
+
+        return res.status(500).json({ error: 'تعذّر تحميل الرتب.' });
+    }
+});
+
+app.get('/api/settings/:guildId', requireLogin, async (req, res) => {
+    try {
+        const { guildId } = req.params;
+
+        if (!validSnowflake(guildId)) {
+            return res.status(400).json({ error: 'معرّف السيرفر غير صحيح.' });
+        }
+
+        if (!(await isAuthorizedGuild(req, guildId))) {
+            return res.status(403).json({ error: 'غير مسموح لك بالوصول إلى إعدادات هذا السيرفر.' });
+        }
+
+        let settings = await GuildSettings.findOne({ guildId });
+
+        if (!settings) {
+            settings = await GuildSettings.create({ guildId });
+        }
+
+        res.set('Cache-Control', 'no-store');
+        return res.json(plainSettings(settings));
+    } catch (error) {
+        console.error('Get settings error:', error.response?.data || error.message);
+        return res.status(500).json({ error: 'تعذّر تحميل الإعدادات.' });
+    }
+});
+
+app.post('/api/settings/:guildId', requireLogin, async (req, res) => {
+    try {
+        const { guildId } = req.params;
+
+        if (!validSnowflake(guildId)) {
+            return res.status(400).json({ error: 'معرّف السيرفر غير صحيح.' });
+        }
+
+        if (!(await isAuthorizedGuild(req, guildId))) {
+            return res.status(403).json({ error: 'غير مسموح لك بتعديل إعدادات هذا السيرفر.' });
+        }
+
+        if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+            return res.status(400).json({ error: 'بيانات الإعدادات غير صحيحة.' });
+        }
+
+        const body = req.body;
+        const updates = {};
+
+        for (const key of Object.keys(body)) {
+            if (!ALLOWED_FIELDS.includes(key)) continue;
+
+            const value = body[key];
+
+            if (key === 'prefix') {
+                if (typeof value !== 'string' || value.length < 1 || value.length > 5) {
+                    return res.status(400).json({ error: 'البادئة يجب أن تكون من 1 إلى 5 أحرف.' });
+                }
+
+                updates.prefix = value;
+            } else if (['staffRoleId', 'ticketCategoryId', 'logChannelId'].includes(key)) {
+                if (typeof value !== 'string' || (value !== '' && !validSnowflake(value))) {
+                    return res.status(400).json({ error: `قيمة ${key} غير صحيحة.` });
+                }
+
+                updates[key] = value;
+            } else if ([
+                'botName',
+                'botStatus',
+                'activityText',
+                'panelTitle',
+                'panelDescription',
+                'panelImage',
+                'ticketImage',
+                'botAvatar'
+            ].includes(key)) {
+                if (typeof value !== 'string' || value.length > 2000) {
+                    return res.status(400).json({ error: `قيمة ${key} غير صحيحة أو طويلة جداً.` });
+                }
+
+                if (['panelImage', 'ticketImage', 'botAvatar'].includes(key) && !validUrl(value)) {
+                    return res.status(400).json({ error: `الرابط الموجود في ${key} غير صحيح.` });
+                }
+
+                if (key === 'botStatus' && !['online', 'idle', 'dnd', 'invisible'].includes(value)) {
+                    return res.status(400).json({ error: 'حالة البوت غير صحيحة.' });
+                }
+
+                if (key === 'botName' && value.length > 100) {
+                    return res.status(400).json({ error: 'اسم البوت طويل جداً.' });
+                }
+
+                if (key === 'activityText' && value.length > 128) {
+                    return res.status(400).json({ error: 'نص النشاط يجب ألا يتجاوز 128 حرفاً.' });
+                }
+
+                updates[key] = value;
+            } else if (key === 'activityType') {
+                const number = Number(value);
+
+                if (![0, 2, 3, 5].includes(number)) {
+                    return res.status(400).json({ error: 'نوع نشاط البوت غير صحيح.' });
+                }
+
+                updates.activityType = number;
+            } else if ([
+                'claimPoints',
+                'warnPoints',
+                'timeoutPoints',
+                'renameCooldown'
+            ].includes(key)) {
+                const number = Number(value);
+                const max = key === 'renameCooldown' ? 1440 : 1000;
+
+                if (!Number.isInteger(number) || number < 0 || number > max) {
+                    return res.status(400).json({ error: `قيمة ${key} يجب أن تكون رقماً صحيحاً بين 0 و${max}.` });
+                }
+
+                updates[key] = number;
+            } else if (key === 'selectOptions') {
+                if (!Array.isArray(value) || value.length !== 3) {
+                    return res.status(400).json({ error: 'يجب تحديد 3 خيارات للتذاكر.' });
+                }
+
+                const allowedValues = ['inquiry', 'complaint', 'technical'];
+                const cleanOptions = [];
+
+                for (let i = 0; i < value.length; i++) {
+                    const option = value[i];
+
+                    if (!option || typeof option !== 'object' || Array.isArray(option)) {
+                        return res.status(400).json({ error: 'أحد خيارات التذاكر غير صحيح.' });
+                    }
+
+                    const optionValue = allowedValues[i];
+                    const label = typeof option.label === 'string' ? option.label.trim() : '';
+                    const description = typeof option.description === 'string' ? option.description.trim() : '';
+                    const emoji = typeof option.emoji === 'string' ? option.emoji.trim() : '';
+
+                    if (!label || label.length > 100 || description.length > 100 || emoji.length > 100) {
+                        return res.status(400).json({ error: 'راجع أسماء وأوصاف خيارات التذاكر.' });
+                    }
+
+                    cleanOptions.push({
+                        label,
+                        value: optionValue,
+                        description,
+                        emoji
+                    });
+                }
+
+                updates.selectOptions = cleanOptions;
+            } else if (key === 'commandPermissions' || key === 'commandAliases') {
+                if (!value || typeof value !== 'object' || Array.isArray(value)) {
+                    return res.status(400).json({ error: `بيانات ${key} غير صحيحة.` });
+                }
+
+                const clean = {};
+
+                for (const command of COMMANDS) {
+                    if (!(command in value)) continue;
+
+                    if (key === 'commandPermissions') {
+                        if (!Array.isArray(value[command]) || value[command].length > 100) {
+                            return res.status(400).json({ error: 'قائمة صلاحيات أحد الأوامر غير صحيحة.' });
+                        }
+
+                        const ids = value[command];
+
+                        if (ids.some(id => typeof id !== 'string' || !validSnowflake(id))) {
+                            return res.status(400).json({ error: 'يوجد معرّف رتبة غير صحيح.' });
+                        }
+
+                        clean[command] = [...new Set(ids)];
+                    } else {
+                        const alias = value[command];
+
+                        if (typeof alias !== 'string' || alias.length > 32 || /\s/.test(alias)) {
+                            return res.status(400).json({ error: 'اختصار الأمر يجب أن يكون كلمة واحدة وبحد أقصى 32 حرفاً.' });
+                        }
+
+                        clean[command] = alias.trim();
+                    }
+                }
+
+                updates[key] = clean;
+            }
+        }
+
+        let settings = await GuildSettings.findOne({ guildId });
+
+        if (!settings) {
+            settings = new GuildSettings({ guildId });
+        }
+
+        for (const [key, value] of Object.entries(updates)) {
+            if (key === 'commandPermissions' || key === 'commandAliases') {
+                const targetMap = settings[key];
+
+                for (const [command, item] of Object.entries(value)) {
+                    targetMap.set(command, item);
+                }
+            } else {
+                settings.set(key, value);
+            }
+        }
+
+        await settings.save();
+
+        res.set('Cache-Control', 'no-store');
+
+        return res.json({
+            success: true,
+            settings: plainSettings(settings)
+        });
+    } catch (error) {
+        console.error('Save settings error:', error.response?.data || error.message);
+        return res.status(500).json({ error: 'حدث خطأ أثناء حفظ الإعدادات.' });
     }
 });
 
@@ -789,7 +820,7 @@ textarea{min-height:90px;resize:vertical}
 .save{border:0;background:#5865f2;color:white;padding:12px 20px;border-radius:10px;font-weight:bold;cursor:pointer}
 .save:hover{background:#4752c4}
 .save:disabled{opacity:.6;cursor:wait}
-#status{font-size:13px;color:#bfc3d4}
+#status{font-size:13px;color:#bfc3d4;line-height:1.7}
 .command{border:1px solid #35394b;padding:13px;border-radius:11px;margin-bottom:12px}
 .command strong{display:block;margin-bottom:10px;font-size:14px}
 .role-list{display:flex;flex-wrap:wrap;gap:8px}
@@ -797,8 +828,7 @@ textarea{min-height:90px;resize:vertical}
 .role-choice input{width:auto;margin:0}
 .role-choice span{overflow-wrap:anywhere}
 .option{padding:14px;border:1px solid #35394b;border-radius:11px;margin-bottom:12px}
-.empty{color:#a6aabd;font-size:13px}
-.danger{color:#ffb0b0}
+.empty{color:#a6aabd;font-size:13px;line-height:1.8}
 @media(max-width:750px){.layout{grid-template-columns:1fr}nav{position:static;display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.grid{grid-template-columns:1fr}section.panel{padding:15px}header{padding:14px}}
 </style>
 </head>
@@ -813,6 +843,7 @@ textarea{min-height:90px;resize:vertical}
 <main>
     <h1>${escapeHtml(guildName)}</h1>
     <div class="sub">عدّل إعدادات البوت ثم اضغط «حفظ الإعدادات» لتطبيق التغييرات.</div>
+
     <div class="layout">
         <nav id="tabs">
             <button class="active" data-tab="general">إعدادات البوت</button>
@@ -823,17 +854,36 @@ textarea{min-height:90px;resize:vertical}
             <button data-tab="permissions">صلاحيات الأوامر</button>
             <button data-tab="points">النقاط والمهلة</button>
         </nav>
+
         <div>
             <section class="panel active" id="general">
                 <h2>إعدادات البوت</h2>
                 <div class="field"><label for="botName">اسم البوت</label><input id="botName" maxlength="100" placeholder="اسم البوت"></div>
                 <div class="field"><label for="botAvatar">رابط صورة البوت</label><input id="botAvatar" type="url" placeholder="https://..."></div>
+
                 <div class="grid">
-                    <div class="field"><label for="botStatus">حالة البوت</label><select id="botStatus"><option value="online">متصل</option><option value="idle">خامل</option><option value="dnd">عدم الإزعاج</option><option value="invisible">مخفي</option></select></div>
-                    <div class="field"><label for="activityType">نوع النشاط</label><select id="activityType"><option value="0">يلعب</option><option value="2">يستمع إلى</option><option value="3">يشاهد</option><option value="5">يتنافس في</option></select></div>
+                    <div class="field">
+                        <label for="botStatus">حالة البوت</label>
+                        <select id="botStatus">
+                            <option value="online">متصل</option>
+                            <option value="idle">خامل</option>
+                            <option value="dnd">عدم الإزعاج</option>
+                            <option value="invisible">مخفي</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label for="activityType">نوع النشاط</label>
+                        <select id="activityType">
+                            <option value="0">يلعب</option>
+                            <option value="2">يستمع إلى</option>
+                            <option value="3">يشاهد</option>
+                            <option value="5">يتنافس في</option>
+                        </select>
+                    </div>
                 </div>
+
                 <div class="field"><label for="activityText">نص النشاط</label><input id="activityText" maxlength="128" placeholder="مثال: الدعم الفني"></div>
-                <p class="help">تغيير هذه القيم في لوحة التحكم يحفظها في قاعدة البيانات. يجب أن يقرأها كود البوت ويطبّقها حتى يتغير نشاطه فعلياً.</p>
+                <p class="help">يتم حفظ الإعدادات في قاعدة البيانات. يجب أن يقرأها كود البوت ويطبّقها حتى يتغير نشاطه فعلياً.</p>
             </section>
 
             <section class="panel" id="channels">
@@ -841,7 +891,7 @@ textarea{min-height:90px;resize:vertical}
                 <div class="field"><label for="staffRoleId">معرّف رتبة الإدارة</label><input id="staffRoleId" placeholder="Role ID"></div>
                 <div class="field"><label for="ticketCategoryId">معرّف كاتيجوري التذاكر</label><input id="ticketCategoryId" placeholder="Category ID"></div>
                 <div class="field"><label for="logChannelId">معرّف قناة اللوق</label><input id="logChannelId" placeholder="Channel ID"></div>
-                <p class="help">لنسخ المعرّف في Discord، فعّل وضع المطوّر ثم اضغط مطولاً على الرتبة أو القناة واختر نسخ المعرّف.</p>
+                <p class="help">فعّل وضع المطوّر في Discord ثم اختر نسخ المعرّف من الرتبة أو القناة.</p>
             </section>
 
             <section class="panel" id="panel">
@@ -884,7 +934,7 @@ textarea{min-height:90px;resize:vertical}
 
             <section class="panel" id="permissions">
                 <h2>صلاحيات الأوامر</h2>
-                <p class="help">إذا لم تختر أي رتبة لأمر، فسيكون متاحاً للجميع حسب منطق البوت. عند اختيار رتب، يُسمح لحاملي واحدة منها باستخدام الأمر. صلاحية Administrator يجب أن تظل مسموحة من داخل البوت.</p>
+                <p class="help">إذا لم تختر أي رتبة لأمر، فسيكون متاحاً للجميع حسب منطق البوت. عند اختيار رتب، يُسمح لحاملي واحدة منها باستخدام الأمر. يجب أن يطبّق كود البوت هذه الإعدادات فعلياً.</p>
                 <div id="permissionFields"><div class="empty">جارٍ تحميل الرتب...</div></div>
             </section>
 
@@ -906,21 +956,11 @@ textarea{min-height:90px;resize:vertical}
         </div>
     </div>
 </main>
+
 <script>
 (function () {
     const guildId = ${JSON.stringify(guildId)};
-    const commandNames = {
-        add: 'إضافة عضو -add',
-        come: 'استدعاء إداري -come',
-        rename: 'إعادة تسمية -rename',
-        claim: 'استلام التذكرة',
-        timeout: 'تايم عضو -تايم',
-        warn: 'تحذير عضو -تحذير',
-        close: 'قفل التذكرة',
-        delete: 'حذف التذكرة',
-        addpoints: 'إضافة نقاط',
-        removepoints: 'إزالة نقاط'
-    };
+    const commandNames = ${JSON.stringify(COMMAND_NAMES)};
 
     let currentSettings = {};
     let roles = [];
@@ -969,7 +1009,7 @@ textarea{min-height:90px;resize:vertical}
             input.id = 'alias_' + command;
             input.maxLength = 32;
             input.placeholder = 'اختصار اختياري';
-            input.value = settings.commandAliases && settings.commandAliases[command] !== undefined
+            input.value = settings.commandAliases && settings.commandAliases[command]
                 ? settings.commandAliases[command]
                 : '';
 
@@ -1042,6 +1082,7 @@ textarea{min-height:90px;resize:vertical}
 
         for (let i = 0; i < 3; i++) {
             const option = options[i] || {};
+
             setValue('option' + i + 'label', option.label || ['استفسار', 'شكوى', 'مشكلة تقنية'][i]);
             setValue('option' + i + 'emoji', option.emoji || '');
             setValue('option' + i + 'description', option.description || '');
@@ -1062,11 +1103,6 @@ textarea{min-height:90px;resize:vertical}
             ]);
 
             if (!results[0].ok || !results[1].ok) {
-                if (results.some(response => response.status === 401)) {
-                    window.location.href = '/';
-                    return;
-                }
-
                 throw new Error('تعذّر تحميل البيانات. حدّث الصفحة أو سجّل الدخول من جديد.');
             }
 
@@ -1169,11 +1205,6 @@ textarea{min-height:90px;resize:vertical}
                 return {};
             });
 
-            if (response.status === 401) {
-                window.location.href = '/';
-                return;
-            }
-
             if (!response.ok) {
                 throw new Error(result.error || 'فشل حفظ الإعدادات.');
             }
@@ -1195,8 +1226,8 @@ textarea{min-height:90px;resize:vertical}
     } catch (error) {
         console.error('Guild settings page error:', error.response?.data || error.message);
 
-        if (['Discord session expired', 'Discord login required'].includes(error.message)) {
-            return res.redirect('/');
+        if (error.message === 'Discord session expired' || error.message === 'Discord login required') {
+            return res.redirect('/?error=login');
         }
 
         return res.status(500).send('حدث خطأ أثناء فتح إعدادات السيرفر.');

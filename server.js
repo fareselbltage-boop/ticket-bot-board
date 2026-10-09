@@ -17,9 +17,7 @@ const BOT_NAME = process.env.BOT_NAME || 'Light Ticket Bot';
 const BOT_AVATAR = process.env.BOT_AVATAR || 'https://i.postimg.cc/tJW3r0PJ/Screenshot-20261001-232609-ibis-Paint-X.jpg';
 const SITE_BG = 'https://i.postimg.cc/s2x5kG7S/1791496064027.jpg';
 
-if (!MONGO_URI) {
-    console.warn('WARNING: MONGO_URI is missing.');
-} else {
+if (MONGO_URI) {
     mongoose.connect(MONGO_URI)
         .then(() => console.log('MongoDB Connected in Dashboard'))
         .catch(error => console.error('MongoDB Error:', error.message));
@@ -40,6 +38,8 @@ const defaultAliases = {
     timeout: [{ alias: 'تايم', active: true }],
     untimeout: [{ alias: 'فك-تايم', active: true }],
     warn: [{ alias: 'تحذير', active: true }],
+    unwarn: [{ alias: 'فك-تحذير', active: true }],
+    warnings: [{ alias: 'تحذيرات', active: true }],
     close: [{ alias: 'اغلاق', active: true }],
     delete: [{ alias: 'حذف', active: true }],
     addpoints: [{ alias: 'addpoints', active: true }],
@@ -109,7 +109,7 @@ app.use(session({
 
 const COMMANDS = [
     'add', 'come', 'rename', 'claim', 'timeout', 'untimeout',
-    'warn', 'close', 'delete', 'addpoints', 'removepoints', 'resettop'
+    'warn', 'unwarn', 'warnings', 'close', 'delete', 'addpoints', 'removepoints', 'resettop'
 ];
 
 const COMMAND_NAMES = {
@@ -120,6 +120,8 @@ const COMMAND_NAMES = {
     timeout: 'تايم أوت عضو (timeout)',
     untimeout: 'إلغاء التايم أوت (untimeout)',
     warn: 'تحذير عضو (warn)',
+    unwarn: 'إزالة تحذير (unwarn)',
+    warnings: 'عرض التحذيرات (warnings)',
     close: 'قفل التذكرة (close)',
     delete: 'حذف التذكرة (delete)',
     addpoints: 'إضافة نقاط (addpoints)',
@@ -130,6 +132,7 @@ const COMMAND_NAMES = {
 const POINT_COMMANDS = {
     claim: 'استلام التكت (claim)',
     warn: 'تحذير عضو (warn)',
+    unwarn: 'إزالة تحذير (unwarn)',
     timeout: 'تايم أوت (timeout)',
     close: 'إغلاق التكت (close)'
 };
@@ -170,13 +173,11 @@ function escapeHtml(value = '') {
 
 function plainSettings(settings) {
     const obj = settings.toObject();
-
     for (const key of ['commandPermissions', 'commandAliases']) {
         if (obj[key] instanceof Map) {
             obj[key] = Object.fromEntries(obj[key]);
         }
     }
-
     return obj;
 }
 
@@ -282,17 +283,13 @@ async function getFreshUserGuilds(req, forceRefresh = false) {
 }
 
 async function isAuthorizedGuild(req, guildId) {
-    if (!req.session?.user || !validSnowflake(String(guildId))) {
-        return false;
-    }
-
+    if (!req.session?.user || !validSnowflake(String(guildId))) return false;
     const guilds = await getFreshUserGuilds(req);
     return guilds.some(guild => String(guild.id) === String(guildId));
 }
 
 app.get('/login', (req, res) => {
     const clientId = process.env.CLIENT_ID;
-
     if (!clientId || !process.env.CLIENT_SECRET || !REDIRECT_URI) {
         return res.status(500).send('إعدادات تسجيل الدخول غير مكتملة.');
     }
@@ -310,10 +307,7 @@ app.get('/login', (req, res) => {
 app.get('/api/auth/callback', async (req, res) => {
     try {
         const code = req.query.code;
-
-        if (typeof code !== 'string' || !code) {
-            return res.redirect('/?error=login');
-        }
+        if (typeof code !== 'string' || !code) return res.redirect('/?error=login');
 
         const clientId = process.env.CLIENT_ID;
         const clientSecret = process.env.CLIENT_SECRET;
@@ -327,10 +321,7 @@ app.get('/api/auth/callback', async (req, res) => {
                 code,
                 redirect_uri: REDIRECT_URI
             }).toString(),
-            {
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                timeout: 15000
-            }
+            { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, timeout: 15000 }
         );
 
         const accessToken = tokenResponse.data.access_token;
@@ -361,14 +352,12 @@ app.get('/api/auth/callback', async (req, res) => {
 
         return res.redirect('/dashboard');
     } catch (error) {
-        console.error('Discord OAuth callback error:', error.response?.data || error.message);
         return res.redirect('/?error=login');
     }
 });
 
 app.get('/logout', (req, res) => {
     if (!req.session) return res.redirect('/');
-
     req.session.destroy(() => {
         res.clearCookie('connect.sid');
         res.redirect('/');
@@ -383,9 +372,7 @@ app.get('/', (req, res) => {
     const botName = escapeHtml(BOT_NAME);
     const botAvatar = validUrl(BOT_AVATAR) ? BOT_AVATAR : '';
     const background = validUrl(SITE_BG) ? SITE_BG : '';
-    const loginError = req.query.error === 'login'
-        ? '<p class="error">تعذّر تسجيل الدخول. حاول مرة أخرى.</p>'
-        : '';
+    const loginError = req.query.error === 'login' ? '<p class="error">تعذّر تسجيل الدخول. حاول مرة أخرى.</p>' : '';
 
     res.set('Cache-Control', 'no-store');
 
@@ -498,15 +485,6 @@ h1{font-size:28px;margin-bottom:8px}
 </body>
 </html>`);
     } catch (error) {
-        if (error.message === 'Discord session expired' || error.message === 'Discord login required') {
-            if (req.session) {
-                req.session.user = null;
-                req.session.accessToken = null;
-                req.session.refreshToken = null;
-            }
-            return res.redirect('/?error=login');
-        }
-
         return res.status(500).send('حدث خطأ أثناء تحميل السيرفرات.');
     }
 });
@@ -514,14 +492,8 @@ h1{font-size:28px;margin-bottom:8px}
 app.get('/api/roles/:guildId', requireLogin, async (req, res) => {
     try {
         const { guildId } = req.params;
-
-        if (!validSnowflake(guildId)) {
-            return res.status(400).json({ error: 'معرّف السيرفر غير صحيح.' });
-        }
-
-        if (!(await isAuthorizedGuild(req, guildId))) {
-            return res.status(403).json({ error: 'ليس لديك صلاحية إدارة هذا السيرفر أو البوت غير موجود فيه.' });
-        }
+        if (!validSnowflake(guildId)) return res.status(400).json({ error: 'معرّف السيرفر غير صحيح.' });
+        if (!(await isAuthorizedGuild(req, guildId))) return res.status(403).json({ error: 'غير مسموح لك.' });
 
         const response = await axios.get(`${API}/guilds/${guildId}/roles`, {
             headers: { Authorization: `Bot ${BOT_TOKEN}` },
@@ -530,36 +502,23 @@ app.get('/api/roles/:guildId', requireLogin, async (req, res) => {
 
         const roles = response.data
             .filter(role => role.id !== guildId && !role.managed)
-            .map(role => ({
-                id: role.id,
-                name: role.name,
-                color: role.color
-            }));
+            .map(role => ({ id: role.id, name: role.name, color: role.color }));
 
         res.set('Cache-Control', 'no-store');
         return res.json(roles);
     } catch (error) {
-        return res.status(500).json({ error: 'تعذّر تحميل الرتب من Discord.' });
+        return res.status(500).json({ error: 'تعذّر تحميل الرتب.' });
     }
 });
 
 app.get('/api/settings/:guildId', requireLogin, async (req, res) => {
     try {
         const { guildId } = req.params;
-
-        if (!validSnowflake(guildId)) {
-            return res.status(400).json({ error: 'معرّف السيرفر غير صحيح.' });
-        }
-
-        if (!(await isAuthorizedGuild(req, guildId))) {
-            return res.status(403).json({ error: 'غير مسموح لك بالوصول إلى إعدادات هذا السيرفر.' });
-        }
+        if (!validSnowflake(guildId)) return res.status(400).json({ error: 'معرّف السيرفر غير صحيح.' });
+        if (!(await isAuthorizedGuild(req, guildId))) return res.status(403).json({ error: 'غير مسموح لك.' });
 
         let settings = await GuildSettings.findOne({ guildId });
-
-        if (!settings) {
-            settings = await GuildSettings.create({ guildId });
-        }
+        if (!settings) settings = await GuildSettings.create({ guildId });
 
         res.set('Cache-Control', 'no-store');
         return res.json(plainSettings(settings));
@@ -571,14 +530,8 @@ app.get('/api/settings/:guildId', requireLogin, async (req, res) => {
 app.post('/api/settings/:guildId', requireLogin, async (req, res) => {
     try {
         const { guildId } = req.params;
-
-        if (!validSnowflake(guildId)) {
-            return res.status(400).json({ error: 'معرّف السيرفر غير صحيح.' });
-        }
-
-        if (!(await isAuthorizedGuild(req, guildId))) {
-            return res.status(403).json({ error: 'غير مسموح لك بتعديل إعدادات هذا السيرفر.' });
-        }
+        if (!validSnowflake(guildId)) return res.status(400).json({ error: 'معرّف السيرفر غير صحيح.' });
+        if (!(await isAuthorizedGuild(req, guildId))) return res.status(403).json({ error: 'غير مسموح لك.' });
 
         const body = req.body;
         const updates = {};
@@ -587,54 +540,34 @@ app.post('/api/settings/:guildId', requireLogin, async (req, res) => {
             if (!ALLOWED_FIELDS.includes(key)) continue;
 
             const value = body[key];
-
-            if (key === 'prefix') {
-                updates.prefix = String(value || '').trim();
-            } else if (['staffRoleId', 'ticketCategoryId', 'logChannelId'].includes(key)) {
-                updates[key] = String(value || '').trim();
-            } else if ([
-                'botName', 'botStatus', 'activityText',
-                'panelTitle', 'panelDescription', 'panelImage',
-                'ticketImage', 'botAvatar'
-            ].includes(key)) {
-                updates[key] = String(value || '').trim();
-            } else if (key === 'activityType') {
-                updates.activityType = Number(value) || 0;
-            } else if (key === 'renameCooldown') {
-                updates.renameCooldown = Number(value) || 10;
-            } else if (key === 'selectOptions') {
-                updates.selectOptions = Array.isArray(value) ? value : defaultOptions;
-            } else if (key === 'autoReplies') {
-                updates.autoReplies = Array.isArray(value) ? value : [];
-            } else if (key === 'rolePointsConfig') {
-                if (!Array.isArray(value)) {
-                    return res.status(400).json({ error: 'بيانات نقاط الرتب غير صحيحة.' });
-                }
+            if (key === 'prefix') updates.prefix = String(value || '').trim();
+            else if (['staffRoleId', 'ticketCategoryId', 'logChannelId'].includes(key)) updates[key] = String(value || '').trim();
+            else if (['botName', 'botStatus', 'activityText', 'panelTitle', 'panelDescription', 'panelImage', 'ticketImage', 'botAvatar'].includes(key)) updates[key] = String(value || '').trim();
+            else if (key === 'activityType') updates.activityType = Number(value) || 0;
+            else if (key === 'renameCooldown') updates.renameCooldown = Number(value) || 10;
+            else if (key === 'selectOptions') updates.selectOptions = Array.isArray(value) ? value : defaultOptions;
+            else if (key === 'autoReplies') updates.autoReplies = Array.isArray(value) ? value : [];
+            else if (key === 'rolePointsConfig') {
+                if (!Array.isArray(value)) return res.status(400).json({ error: 'بيانات نقاط الرتب غير صحيحة.' });
                 const cleanConfigs = [];
                 for (const item of value) {
                     if (!item || typeof item !== 'object') continue;
                     const roleId = String(item.roleId || '').trim();
                     const commands = item.commands && typeof item.commands === 'object' ? item.commands : {};
-                    
                     if (validSnowflake(roleId)) {
                         const cleanCmds = {};
-                        for (const cmdKey of ['claim', 'warn', 'timeout', 'close']) {
+                        for (const cmdKey of ['claim', 'warn', 'unwarn', 'timeout', 'close']) {
                             cleanCmds[cmdKey] = Number(commands[cmdKey]) >= 0 ? Number(commands[cmdKey]) : 1;
                         }
                         cleanConfigs.push({ roleId, commands: cleanCmds });
                     }
                 }
                 updates.rolePointsConfig = cleanConfigs;
-            } else if (key === 'commandPermissions' || key === 'commandAliases') {
-                updates[key] = value;
-            }
+            } else if (key === 'commandPermissions' || key === 'commandAliases') updates[key] = value;
         }
 
         let settings = await GuildSettings.findOne({ guildId });
-
-        if (!settings) {
-            settings = new GuildSettings({ guildId });
-        }
+        if (!settings) settings = new GuildSettings({ guildId });
 
         for (const [key, value] of Object.entries(updates)) {
             if (key === 'commandPermissions' || key === 'commandAliases') {
@@ -648,12 +581,8 @@ app.post('/api/settings/:guildId', requireLogin, async (req, res) => {
         }
 
         await settings.save();
-
         res.set('Cache-Control', 'no-store');
-        return res.json({
-            success: true,
-            settings: plainSettings(settings)
-        });
+        return res.json({ success: true, settings: plainSettings(settings) });
     } catch (error) {
         return res.status(500).json({ error: 'حدث خطأ أثناء حفظ الإعدادات.' });
     }
@@ -662,17 +591,10 @@ app.post('/api/settings/:guildId', requireLogin, async (req, res) => {
 app.get('/dashboard/:guildId', requireLogin, async (req, res) => {
     try {
         const guildId = req.params.guildId;
-
-        if (!validSnowflake(guildId)) {
-            return res.status(400).send('معرّف السيرفر غير صحيح.');
-        }
-
-        if (!(await isAuthorizedGuild(req, guildId))) {
-            return res.status(403).send('ليس لديك صلاحية إدارة هذا السيرفر أو البوت غير موجود فيه.');
-        }
+        if (!validSnowflake(guildId)) return res.status(400).send('معرّف السيرفر غير صحيح.');
+        if (!(await isAuthorizedGuild(req, guildId))) return res.status(403).send('غير مسموح لك.');
 
         let guildName = 'إعدادات السيرفر';
-
         try {
             const guildResponse = await axios.get(`${API}/guilds/${guildId}`, {
                 headers: { Authorization: `Bot ${BOT_TOKEN}` },
@@ -766,7 +688,6 @@ textarea{min-height:90px;resize:vertical}
                 <h2>إعدادات البوت</h2>
                 <div class="field"><label for="botName">اسم البوت</label><input id="botName" maxlength="100" placeholder="اسم البوت"></div>
                 <div class="field"><label for="botAvatar">رابط صورة البوت</label><input id="botAvatar" type="url" placeholder="https://..."></div>
-
                 <div class="grid">
                     <div class="field">
                         <label for="botStatus">حالة البوت</label>
@@ -787,7 +708,6 @@ textarea{min-height:90px;resize:vertical}
                         </select>
                     </div>
                 </div>
-
                 <div class="field"><label for="activityText">نص النشاط</label><input id="activityText" maxlength="128" placeholder="مثال: الدعم الفني"></div>
             </section>
 
@@ -891,11 +811,9 @@ textarea{min-height:90px;resize:vertical}
             document.querySelectorAll('#tabs button').forEach(function (item) {
                 item.classList.remove('active');
             });
-
             document.querySelectorAll('section.panel').forEach(function (panel) {
                 panel.classList.remove('active');
             });
-
             button.classList.add('active');
             document.getElementById(button.dataset.tab).classList.add('active');
         });
@@ -903,9 +821,7 @@ textarea{min-height:90px;resize:vertical}
 
     function setValue(id, value) {
         const element = document.getElementById(id);
-        if (element && value !== undefined && value !== null) {
-            element.value = value;
-        }
+        if (element && value !== undefined && value !== null) element.value = value;
     }
 
     function getValue(id) {
@@ -982,7 +898,7 @@ textarea{min-height:90px;resize:vertical}
 
     window.addRolePointConfig = function() {
         syncRolePointsFromDOM();
-        rolePointsData.push({ roleId: '', commands: { claim: 1, warn: 1, timeout: 1, close: 1 } });
+        rolePointsData.push({ roleId: '', commands: { claim: 1, warn: 1, unwarn: 1, timeout: 1, close: 1 } });
         renderRolePoints();
     };
 

@@ -1,4 +1,6 @@
+
 require('dotenv').config();
+
 const express = require('express');
 const session = require('express-session');
 const MongoStore = require('connect-mongo');
@@ -16,66 +18,64 @@ const BOT_NAME = process.env.BOT_NAME || 'Light Ticket Bot';
 const BOT_AVATAR = process.env.BOT_AVATAR || 'https://i.postimg.cc/tJW3r0PJ/Screenshot-20261001-232609-ibis-Paint-X.jpg';
 const SITE_BG = 'https://i.postimg.cc/s2x5kG7S/1791496064027.jpg';
 
+if (!MONGO_URI) {
+    console.error('MONGO_URI is missing.');
+}
+
 if (MONGO_URI) {
     mongoose.connect(MONGO_URI)
         .then(() => console.log('MongoDB Connected in Dashboard'))
-        .catch(err => console.error('MongoDB Error:', err));
+        .catch(err => console.error('MongoDB Error:', err.message));
 }
 
+const defaultOptions = [
+    { label: 'استفسار', value: 'inquiry', emoji: '❓', description: 'للاستفسارات العامة والأسئلة' },
+    { label: 'شكوى', value: 'complaint', emoji: '⚠️', description: 'تقديم شكوى إدارية' },
+    { label: 'مشكلة تقنية', value: 'technical', emoji: '🛠', description: 'المشاكل الفنية والتقنية' }
+];
+
 const GuildSettings = mongoose.models.GuildSettings || mongoose.model('GuildSettings', new mongoose.Schema({
-  guildId: { type: String, required: true, unique: true },
-  prefix: { type: String, default: '-' },
-  staffRoleId: { type: String, default: '1555478928708337775' },
-  ticketCategoryId: { type: String, default: '1555176022352208012' },
-  logChannelId: { type: String, default: '1555488444182962216' },
-  panelImage: { type: String, default: 'https://i.postimg.cc/j5x6JgQH/Untitled900-20260927182744.jpg' },
-  ticketImage: { type: String, default: 'https://i.postimg.cc/j5x6JgQH/Untitled900-20260927182744.jpg' },
-  panelTitle: { type: String, default: '🎫 LIGHT Support | الدعم الفني' },
-  panelDescription: { type: String, default: 'مرحباً بك في نظام الدعم الفني الخاص بسيرفر LIGHT.' },
-  
-  botName: { type: String, default: 'Light Ticket Bot' },
-  botAvatar: { type: String, default: 'https://i.postimg.cc/tJW3r0PJ/Screenshot-20261001-232609-ibis-Paint-X.jpg' },
-  botStatus: { type: String, default: 'online' },
-  activityType: { type: Number, default: 0 },
-  activityText: { type: String, default: '-help / التذاكر' },
-
-  claimPoints: { type: Number, default: 1 },
-  warnPoints: { type: Number, default: 1 },
-  timeoutPoints: { type: Number, default: 1 },
-  renameCooldown: { type: Number, default: 10 },
-
-  selectOptions: {
-    type: Array,
-    default: [
-      { label: 'استفسار', value: 'inquiry', emoji: '❓', description: 'للاستفسارات العامة والأسئلة' },
-      { label: 'شكوى', value: 'complaint', emoji: '⚠️', description: 'تقديم شكوى إدارية' },
-      { label: 'مشكلة تقنية', value: 'technical', emoji: '🛠', description: 'المشاكل الفنية والتقنية' }
-    ]
-  },
-
-  commandPermissions: { type: Map, of: [String], default: {} },
-  commandAliases: {
-    type: Map,
-    of: String,
-    default: {
-      add: 'add',
-      come: 'come',
-      rename: 'rename',
-      claim: 'استلام',
-      timeout: 'تايم',
-      warn: 'تحذير',
-      close: 'اغلاق',
-      delete: 'حذف',
-      addpoints: 'addpoints',
-      removepoints: 'removepoints'
+    guildId: { type: String, required: true, unique: true },
+    prefix: { type: String, default: '-' },
+    staffRoleId: { type: String, default: '1555478928708337775' },
+    ticketCategoryId: { type: String, default: '1555176022352208012' },
+    logChannelId: { type: String, default: '1555488444182962216' },
+    panelImage: { type: String, default: 'https://i.postimg.cc/j5x6JgQH/Untitled900-20260927182744.jpg' },
+    ticketImage: { type: String, default: 'https://i.postimg.cc/j5x6JgQH/Untitled900-20260927182744.jpg' },
+    panelTitle: { type: String, default: '🎫 LIGHT Support | الدعم الفني' },
+    panelDescription: { type: String, default: 'مرحباً بك في نظام الدعم الفني الخاص بسيرفر LIGHT.' },
+    botName: { type: String, default: 'Light Ticket Bot' },
+    botAvatar: { type: String, default: 'https://i.postimg.cc/tJW3r0PJ/Screenshot-20261001-232609-ibis-Paint-X.jpg' },
+    botStatus: { type: String, enum: ['online', 'idle', 'dnd', 'invisible'], default: 'online' },
+    activityType: { type: Number, default: 0 },
+    activityText: { type: String, default: '-help / التذاكر' },
+    claimPoints: { type: Number, default: 1 },
+    warnPoints: { type: Number, default: 1 },
+    timeoutPoints: { type: Number, default: 1 },
+    renameCooldown: { type: Number, default: 10 },
+    selectOptions: { type: Array, default: defaultOptions },
+    commandPermissions: { type: Map, of: [String], default: {} },
+    commandAliases: {
+        type: Map,
+        of: String,
+        default: {
+            add: 'add',
+            come: 'come',
+            rename: 'rename',
+            claim: 'استلام',
+            timeout: 'تايم',
+            warn: 'تحذير',
+            close: 'اغلاق',
+            delete: 'حذف',
+            addpoints: 'addpoints',
+            removepoints: 'removepoints'
+        }
     }
-  }
 }, { timestamps: true }));
 
 app.set('trust proxy', 1);
-
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '100kb' }));
+app.use(express.urlencoded({ extended: true, limit: '100kb' }));
 
 app.use((req, res, next) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
@@ -86,666 +86,1131 @@ app.use((req, res, next) => {
 });
 
 app.use(session({
-    secret: process.env.SESSION_SECRET || 'secret-key-empire-12345',
+    secret: process.env.SESSION_SECRET || 'dev-only-change-this-session-secret',
     resave: false,
     saveUninitialized: false,
-    store: MongoStore.create({
-        mongoUrl: MONGO_URI || 'mongodb://localhost:27017/ticketbot',
-        ttl: 30 * 24 * 60 * 60
-    }),
+    ...(MONGO_URI ? {
+        store: MongoStore.create({
+            mongoUrl: MONGO_URI,
+            ttl: 30 * 24 * 60 * 60
+        })
+    } : {}),
     cookie: {
         maxAge: 30 * 24 * 60 * 60 * 1000,
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax'
+        sameSite: 'lax',
+        httpOnly: true
     }
 }));
+
+const API = 'https://discord.com/api/v10';
+
+const COMMANDS = [
+    'add', 'come', 'rename', 'claim', 'timeout',
+    'warn', 'close', 'delete', 'addpoints', 'removepoints'
+];
+
+const ALLOWED_FIELDS = [
+    'prefix', 'staffRoleId', 'ticketCategoryId', 'logChannelId',
+    'panelImage', 'ticketImage', 'panelTitle', 'panelDescription',
+    'botName', 'botAvatar', 'botStatus', 'activityType', 'activityText',
+    'claimPoints', 'warnPoints', 'timeoutPoints', 'renameCooldown',
+    'selectOptions', 'commandPermissions', 'commandAliases'
+];
+
+function validSnowflake(value) {
+    return typeof value === 'string' && /^\d{17,20}$/.test(value);
+}
 
 async function getFreshUserGuilds(req) {
     let accessToken = req.session.accessToken;
 
+    if (!accessToken && !req.session.refreshToken) {
+        throw new Error('Discord login required');
+    }
+
     if (req.session.refreshToken) {
         try {
-            const refreshRes = await axios.post('https://discord.com/api/oauth2/token', new URLSearchParams({
-                client_id: process.env.CLIENT_ID,
-                client_secret: process.env.CLIENT_SECRET,
-                grant_type: 'refresh_token',
-                refresh_token: req.session.refreshToken,
-            }), {
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-            });
+            const refreshRes = await axios.post(
+                `${API}/oauth2/token`,
+                new URLSearchParams({
+                    client_id: process.env.CLIENT_ID,
+                    client_secret: process.env.CLIENT_SECRET,
+                    grant_type: 'refresh_token',
+                    refresh_token: req.session.refreshToken
+                }),
+                {
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    timeout: 15000
+                }
+            );
 
             accessToken = refreshRes.data.access_token;
             req.session.accessToken = accessToken;
-            req.session.refreshToken = refreshRes.data.refresh_token;
-        } catch (e) {
-            console.log('Refresh token attempt failed, using existing access token.');
+
+            if (refreshRes.data.refresh_token) {
+                req.session.refreshToken = refreshRes.data.refresh_token;
+            }
+        } catch (err) {
+            if (!accessToken || [400, 401].includes(err.response?.status)) {
+                req.session.accessToken = null;
+                req.session.refreshToken = null;
+                throw new Error('Discord session expired');
+            }
+
+            console.error('Refresh token error:', err.response?.data || err.message);
         }
     }
 
-    const userGuildsResponse = await axios.get(`https://discord.com/api/users/@me/guilds?_t=${Date.now()}`, {
-        headers: { Authorization: `Bearer ${accessToken}` }
-    });
-
-    let botGuildIds = new Set();
-    try {
-        const botGuildsResponse = await axios.get(`https://discord.com/api/users/@me/guilds?limit=200&_t=${Date.now()}`, {
-            headers: { Authorization: `Bot ${BOT_TOKEN}` }
-        });
-        botGuildIds = new Set(botGuildsResponse.data.map(g => String(g.id)));
-    } catch (botErr) {
-        console.error('Bot Guilds Fetch Error:', botErr.response ? botErr.response.data : botErr.message);
+    if (!accessToken) {
+        throw new Error('Discord login required');
     }
 
-    return userGuildsResponse.data.filter(g => {
-        const isManager = (parseInt(g.permissions) & 0x8) === 0x8 || (parseInt(g.permissions) & 0x20) === 0x20;
-        const botInGuild = botGuildIds.has(String(g.id));
-        return isManager && botInGuild;
+    const response = await axios.get(`${API}/users/@me/guilds`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        timeout: 15000
     });
+
+    const manageableGuilds = response.data.filter(guild => {
+        const permissions = BigInt(guild.permissions || '0');
+
+        return (permissions & 8n) === 8n ||
+               (permissions & 32n) === 32n;
+    });
+
+    if (!BOT_TOKEN) {
+        throw new Error('Bot token is not configured');
+    }
+
+    const checks = await Promise.all(
+        manageableGuilds.map(async guild => {
+            try {
+                await axios.get(`${API}/guilds/${guild.id}`, {
+                    headers: { Authorization: `Bot ${BOT_TOKEN}` },
+                    timeout: 10000
+                });
+
+                return guild;
+            } catch (err) {
+                if (![403, 404].includes(err.response?.status)) {
+                    console.error(
+                        `Guild check failed (${guild.id}):`,
+                        err.response?.data || err.message
+                    );
+                }
+
+                return null;
+            }
+        })
+    );
+
+    return checks.filter(Boolean);
 }
 
-app.get('/api/roles/:guildId', async (req, res) => {
-    if (!req.session.user) return res.status(401).json({ error: 'غير مصرح' });
-    try {
-        const response = await axios.get(`https://discord.com/api/v10/guilds/${req.params.guildId}/roles?_t=${Date.now()}`, {
-            headers: { Authorization: `Bot ${BOT_TOKEN}` }
-        });
-        const roles = response.data
-            .filter(r => r.name !== '@everyone' && !r.managed)
-            .map(r => ({ id: r.id, name: r.name, color: r.color }));
-        res.json(roles);
-    } catch (err) {
-        console.error('Fetch Roles Error:', err.response ? err.response.data : err.message);
-        res.status(500).json({ error: 'تعذر جلب رتب السيرفر' });
+async function isAuthorizedGuild(req, guildId) {
+    if (!req.session.user || !validSnowflake(String(guildId))) {
+        return false;
     }
-});
 
-app.get('/api/settings/:guildId', async (req, res) => {
-    if (!req.session.user) return res.status(401).json({ error: 'غير مصرح' });
-    try {
-        let settings = await GuildSettings.findOne({ guildId: String(req.params.guildId) });
-        if (!settings) {
-            settings = await GuildSettings.create({ guildId: String(req.params.guildId) });
+    const guilds = await getFreshUserGuilds(req);
+    req.session.guilds = guilds;
+
+    return guilds.some(guild => String(guild.id) === String(guildId));
+}
+
+function plainSettings(settings) {
+    const obj = settings.toObject();
+
+    for (const key of ['commandPermissions', 'commandAliases']) {
+        if (obj[key] instanceof Map) {
+            obj[key] = Object.fromEntries(obj[key]);
         }
-        res.json(settings);
-    } catch (err) {
-        console.error('Get Settings Error:', err);
-        res.status(500).json({ error: 'حدث خطأ أثناء جلب الإعدادات' });
+    }
+
+    return obj;
+}
+
+function escapeHtml(value = '') {
+    return String(value).replace(/[&<>"']/g, char => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    }[char]));
+}
+
+function validUrl(value) {
+    if (typeof value !== 'string' || value.length > 2048) return false;
+    if (!value.trim()) return true;
+
+    try {
+        const url = new URL(value);
+        return url.protocol === 'https:' || url.protocol === 'http:';
+    } catch {
+        return false;
+    }
+}
+
+function requireLogin(req, res, next) {
+    if (!req.session || !req.session.user || !req.session.accessToken) {
+        if (req.path.startsWith('/api/')) {
+            return res.status(401).json({ error: 'سجّل دخولك أولاً.' });
+        }
+
+        return res.redirect('/');
+    }
+
+    next();
+}
+
+app.get('/api/roles/:guildId', requireLogin, async (req, res) => {
+    try {
+        const { guildId } = req.params;
+
+        if (!validSnowflake(guildId)) {
+            return res.status(400).json({ error: 'معرّف السيرفر غير صحيح.' });
+        }
+
+        if (!(await isAuthorizedGuild(req, guildId))) {
+            return res.status(403).json({ error: 'ليس لديك صلاحية إدارة هذا السيرفر أو البوت غير موجود فيه.' });
+        }
+
+        const response = await axios.get(`${API}/guilds/${guildId}/roles`, {
+            headers: { Authorization: `Bot ${BOT_TOKEN}` },
+            timeout: 15000
+        });
+
+        const roles = response.data
+            .filter(role => role.id !== guildId && !role.managed)
+            .map(role => ({
+                id: role.id,
+                name: role.name,
+                color: role.color
+            }));
+
+        res.set('Cache-Control', 'no-store');
+        return res.json(roles);
+    } catch (error) {
+        console.error('Roles API error:', error.response?.data || error.message);
+        return res.status(500).json({ error: 'تعذّر تحميل الرتب.' });
     }
 });
 
-app.post('/api/settings/:guildId', async (req, res) => {
-    if (!req.session.user) return res.status(401).json({ error: 'غير مصرح' });
-
+app.get('/api/settings/:guildId', requireLogin, async (req, res) => {
     try {
-        const guildId = String(req.params.guildId);
-        const updateData = req.body;
+        const { guildId } = req.params;
 
-        const updated = await GuildSettings.findOneAndUpdate(
-            { guildId: guildId },
-            { $set: updateData },
-            { upsert: true, new: true, setDefaultsOnInsert: true }
-        );
+        if (!validSnowflake(guildId)) {
+            return res.status(400).json({ error: 'معرّف السيرفر غير صحيح.' });
+        }
 
-        return res.json({ success: true, settings: updated });
-    } catch (err) {
-        console.error('Save Settings Error:', err);
-        return res.status(500).json({ error: 'حدث خطأ أثناء حفظ الإعدادات' });
+        if (!(await isAuthorizedGuild(req, guildId))) {
+            return res.status(403).json({ error: 'غير مسموح لك بالوصول إلى إعدادات هذا السيرفر.' });
+        }
+
+        let settings = await GuildSettings.findOne({ guildId });
+
+        if (!settings) {
+            settings = await GuildSettings.create({ guildId });
+        }
+
+        res.set('Cache-Control', 'no-store');
+        return res.json(plainSettings(settings));
+    } catch (error) {
+        console.error('Get settings error:', error.message);
+        return res.status(500).json({ error: 'تعذّر تحميل الإعدادات.' });
+    }
+});
+
+app.post('/api/settings/:guildId', requireLogin, async (req, res) => {
+    try {
+        const { guildId } = req.params;
+
+        if (!validSnowflake(guildId)) {
+            return res.status(400).json({ error: 'معرّف السيرفر غير صحيح.' });
+        }
+
+        if (!(await isAuthorizedGuild(req, guildId))) {
+            return res.status(403).json({ error: 'غير مسموح لك بتعديل إعدادات هذا السيرفر.' });
+        }
+
+        if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+            return res.status(400).json({ error: 'بيانات الإعدادات غير صحيحة.' });
+        }
+
+        const body = req.body;
+        const updates = {};
+
+        for (const key of Object.keys(body)) {
+            if (!ALLOWED_FIELDS.includes(key)) continue;
+            const value = body[key];
+
+            if (key === 'prefix') {
+                if (typeof value !== 'string' || value.length < 1 || value.length > 5) {
+                    return res.status(400).json({ error: 'البادئة يجب أن تكون من 1 إلى 5 أحرف.' });
+                }
+
+                updates.prefix = value;
+            } else if ([
+                'staffRoleId',
+                'ticketCategoryId',
+                'logChannelId'
+            ].includes(key)) {
+                if (typeof value !== 'string' || (value !== '' && !validSnowflake(value))) {
+                    return res.status(400).json({ error: `قيمة ${key} غير صحيحة.` });
+                }
+
+                updates[key] = value;
+            } else if ([
+                'botName',
+                'activityText',
+                'panelTitle',
+                'panelDescription',
+                'panelImage',
+                'ticketImage',
+                'botAvatar'
+            ].includes(key)) {
+                if (typeof value !== 'string' || value.length > 2000) {
+                    return res.status(400).json({ error: `قيمة ${key} غير صحيحة أو طويلة جداً.` });
+                }
+
+                if (['panelImage', 'ticketImage', 'botAvatar'].includes(key) && !validUrl(value)) {
+                    return res.status(400).json({ error: `الرابط الموجود في ${key} غير صحيح.` });
+                }
+
+                updates[key] = value;
+            } else if (key === 'botStatus') {
+                if (typeof value !== 'string' || !['online', 'idle', 'dnd', 'invisible'].includes(value)) {
+                    return res.status(400).json({ error: 'حالة البوت غير صحيحة.' });
+                }
+
+                updates.botStatus = value;
+            } else if (key === 'activityType') {
+                const number = Number(value);
+
+                if (![0, 2, 3, 5].includes(number)) {
+                    return res.status(400).json({ error: 'نوع نشاط البوت غير صحيح.' });
+                }
+
+                updates.activityType = number;
+            } else if ([
+                'claimPoints',
+                'warnPoints',
+                'timeoutPoints',
+                'renameCooldown'
+            ].includes(key)) {
+                const number = Number(value);
+                const max = key === 'renameCooldown' ? 1440 : 1000;
+
+                if (!Number.isInteger(number) || number < 0 || number > max) {
+                    return res.status(400).json({ error: `قيمة ${key} يجب أن تكون رقماً صحيحاً بين 0 و${max}.` });
+                }
+
+                updates[key] = number;
+            } else if (key === 'selectOptions') {
+                if (!Array.isArray(value) || value.length !== 3) {
+                    return res.status(400).json({ error: 'يجب تحديد 3 خيارات للتذاكر.' });
+                }
+
+                const allowedValues = ['inquiry', 'complaint', 'technical'];
+                const cleanOptions = [];
+
+                for (let i = 0; i < value.length; i++) {
+                    const option = value[i];
+
+                    if (!option || typeof option !== 'object' || Array.isArray(option)) {
+                        return res.status(400).json({ error: 'أحد خيارات التذاكر غير صحيح.' });
+                    }
+
+                    const label = typeof option.label === 'string' ? option.label.trim() : '';
+                    const description = typeof option.description === 'string' ? option.description.trim() : '';
+                    const emoji = typeof option.emoji === 'string' ? option.emoji.trim() : '';
+
+                    if (!label || label.length > 100 || description.length > 100 || emoji.length > 100) {
+                        return res.status(400).json({ error: 'راجع أسماء وأوصاف خيارات التذاكر.' });
+                    }
+
+                    cleanOptions.push({
+                        label,
+                        value: allowedValues[i],
+                        description,
+                        emoji
+                    });
+                }
+
+                updates.selectOptions = cleanOptions;
+            } else if (key === 'commandPermissions' || key === 'commandAliases') {
+                if (!value || typeof value !== 'object' || Array.isArray(value)) {
+                    return res.status(400).json({ error: `بيانات ${key} غير صحيحة.` });
+                }
+
+                const clean = {};
+
+                for (const command of COMMANDS) {
+                    if (!(command in value)) continue;
+
+                    if (key === 'commandPermissions') {
+                        if (!Array.isArray(value[command]) || value[command].length > 100) {
+                            return res.status(400).json({ error: 'قائمة صلاحيات أحد الأوامر غير صحيحة.' });
+                        }
+
+                        const ids = value[command];
+
+                        if (ids.some(id => typeof id !== 'string' || !validSnowflake(id))) {
+                            return res.status(400).json({ error: 'يوجد معرّف رتبة غير صحيح.' });
+                        }
+
+                        clean[command] = [...new Set(ids)];
+                    } else {
+                        const alias = value[command];
+
+                        if (typeof alias !== 'string' || alias.length > 32 || /\s/.test(alias)) {
+                            return res.status(400).json({ error: 'اختصار الأمر يجب أن يكون كلمة واحدة وبحد أقصى 32 حرفاً.' });
+                        }
+
+                        clean[command] = alias.trim();
+                    }
+                }
+
+                updates[key] = clean;
+            }
+        }
+
+        let settings = await GuildSettings.findOne({ guildId });
+
+        if (!settings) {
+            settings = new GuildSettings({ guildId });
+        }
+
+        for (const [key, value] of Object.entries(updates)) {
+            if (key === 'commandPermissions' || key === 'commandAliases') {
+                const targetMap = settings[key];
+
+                for (const [command, item] of Object.entries(value)) {
+                    targetMap.set(command, item);
+                }
+            } else {
+                settings.set(key, value);
+            }
+        }
+
+        await settings.save();
+
+        res.set('Cache-Control', 'no-store');
+        return res.json({
+            success: true,
+            settings: plainSettings(settings)
+        });
+    } catch (error) {
+        console.error('Save settings error:', error.response?.data || error.message);
+        return res.status(500).json({ error: 'حدث خطأ أثناء حفظ الإعدادات.' });
     }
 });
 
 app.get('/login', (req, res) => {
-    const discordAuthUrl = `https://discord.com/api/oauth2/authorize?client_id=${process.env.CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=identify%20guilds`;
-    res.redirect(discordAuthUrl);
+    const clientId = process.env.CLIENT_ID;
+
+    if (!clientId || !REDIRECT_URI) {
+        return res.status(500).send('إعدادات تسجيل الدخول غير مكتملة.');
+    }
+
+    const params = new URLSearchParams({
+        client_id: clientId,
+        redirect_uri: REDIRECT_URI,
+        response_type: 'code',
+        scope: 'identify guilds'
+    });
+
+    return res.redirect(`https://discord.com/oauth2/authorize?${params.toString()}`);
 });
 
 app.get('/api/auth/callback', async (req, res) => {
-    const code = req.query.code;
-    if (!code) return res.send('لم يتم استقبال كود التحقق من ديسكورد.');
-
     try {
-        const tokenResponse = await axios.post('https://discord.com/api/oauth2/token', new URLSearchParams({
-            client_id: process.env.CLIENT_ID,
-            client_secret: process.env.CLIENT_SECRET,
-            grant_type: 'authorization_code',
-            code: code,
-            redirect_uri: REDIRECT_URI,
-        }), {
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-        });
+        const code = req.query.code;
+
+        if (typeof code !== 'string' || !code) {
+            return res.redirect('/?error=login');
+        }
+
+        const clientId = process.env.CLIENT_ID;
+        const clientSecret = process.env.CLIENT_SECRET;
+
+        if (!clientId || !clientSecret || !REDIRECT_URI) {
+            return res.status(500).send('إعدادات Discord OAuth غير مكتملة.');
+        }
+
+        const tokenResponse = await axios.post(
+            `${API}/oauth2/token`,
+            new URLSearchParams({
+                client_id: clientId,
+                client_secret: clientSecret,
+                grant_type: 'authorization_code',
+                code,
+                redirect_uri: REDIRECT_URI
+            }).toString(),
+            {
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                timeout: 15000
+            }
+        );
 
         const accessToken = tokenResponse.data.access_token;
-        const refreshToken = tokenResponse.data.refreshToken;
+        const refreshToken = tokenResponse.data.refresh_token;
 
-        const userResponse = await axios.get('https://discord.com/api/users/@me', {
-            headers: { Authorization: `Bearer ${accessToken}` }
+        const userResponse = await axios.get(`${API}/users/@me`, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+            timeout: 15000
         });
+
+        await new Promise((resolve, reject) => {
+            req.session.regenerate(error => error ? reject(error) : resolve());
+        });
+
+        req.session.user = {
+            id: userResponse.data.id,
+            username: userResponse.data.username,
+            global_name: userResponse.data.global_name || userResponse.data.username,
+            avatar: userResponse.data.avatar
+        };
 
         req.session.accessToken = accessToken;
         req.session.refreshToken = refreshToken;
-        req.session.user = userResponse.data;
 
-        res.redirect('/dashboard');
-    } catch (error) {
-        console.error('Auth Callback Error:', error.response ? error.response.data : error.message);
-        res.send('حدث خطأ أثناء تسجيل الدخول.');
-    }
-});
-
-app.get('/', (req, res) => {
-    const html = `
-    <!DOCTYPE html>
-    <html lang="ar" dir="rtl">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>${BOT_NAME} - لوحة التحكم الاحترافية</title>
-        
-        <!-- Open Graph / Discord Embed Meta Tags -->
-        <meta property="og:site_name" content="${BOT_NAME}">
-        <meta property="og:type" content="website">
-        <meta property="og:title" content="${BOT_NAME} - لوحة التحكم للإدارة">
-        <meta property="og:description" content="مرحباً بك! قم بإدارة سيرفرك ونظام التذاكر باحترافية وسهولة عبر لوحة التحكم الخاصة بنا.">
-        <meta property="og:image" content="https://i.postimg.cc/tJW3r0PJ/Screenshot-20261001-232609-ibis-Paint-X.jpg">
-        <meta property="og:url" content="https://ticket-bot-board.vercel.app">
-        <meta name="theme-color" content="#5865F2">
-
-        <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
-        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-        <style>
-            * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Cairo', sans-serif; }
-            body { color: #ffffff; min-height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; position: relative; overflow: hidden; background-color: #0b0e14; }
-            body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: url('${SITE_BG}') no-repeat center center/cover; z-index: -1; filter: brightness(0.4) blur(2px); }
-            .card { background: rgba(15, 18, 25, 0.75); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 24px; padding: 45px 35px; max-width: 480px; width: 90%; text-align: center; box-shadow: 0 25px 50px rgba(0,0,0,0.7); }
-            .bot-avatar { width: 110px; height: 110px; border-radius: 50%; border: 3px solid #5865F2; margin-bottom: 20px; object-fit: cover; }
-            h1 { font-size: 28px; font-weight: 800; margin-bottom: 10px; color: #fff; }
-            p { margin: 15px 0 30px; color: #b9bbbe; font-size: 15px; line-height: 1.6; }
-            .btn-login { display: inline-flex; align-items: center; justify-content: center; gap: 12px; width: 100%; background: #5865F2; color: #fff; padding: 14px 28px; font-size: 16px; font-weight: 700; border-radius: 12px; text-decoration: none; transition: 0.3s; }
-            .btn-login:hover { background: #4752C4; }
-        </style>
-    </head>
-    <body>
-        <div class="card">
-            <img src="${BOT_AVATAR}" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'" alt="Bot Avatar" class="bot-avatar">
-            <h1>${BOT_NAME}</h1>
-            <p>مرحباً بك! يرجى تسجيل الدخول بحساب ديسكورد لإدارة واستعراض سيرفراتك.</p>
-            <a href="${req.session.user ? '/dashboard' : '/login'}" class="btn-login">
-                <i class="fa-brands fa-discord"></i> ${req.session.user ? 'الانتقال للوحة التحكم' : 'تسجيل الدخول بواسطة Discord'}
-            </a>
-        </div>
-    </body>
-    </html>
-    `;
-    res.send(html);
-});
-
-app.get('/dashboard', async (req, res) => {
-    if (!req.session.user) return res.redirect('/login');
-
-    let guilds = [];
-    try {
-        guilds = await getFreshUserGuilds(req);
-        req.session.guilds = guilds;
-    } catch (e) {
-        guilds = req.session.guilds || [];
-    }
-
-    const user = req.session.user;
-    const userAvatar = user.avatar ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png` : `https://cdn.discordapp.com/embed/avatars/0.png`;
-
-    let guildsCardsHtml = '';
-    if (guilds.length === 0) {
-        guildsCardsHtml = `<div style="grid-column: 1 / -1; text-align: center; padding: 40px; background: rgba(24, 30, 41, 0.85); border-radius: 16px;"><h3>لا توجد سيرفرات متاحة</h3></div>`;
-    } else {
-        guilds.forEach(guild => {
-            const guildIcon = guild.icon ? `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png` : `https://cdn.discordapp.com/embed/avatars/1.png`;
-            guildsCardsHtml += `
-                <div class="guild-card">
-                    <img src="${guildIcon}" class="guild-icon" alt="${guild.name}">
-                    <div class="guild-info">
-                        <div class="guild-name">${guild.name}</div>
-                        <div class="guild-id">ID: ${guild.id}</div>
-                    </div>
-                    <a href="/dashboard/${guild.id}" class="btn-manage"><i class="fa-solid fa-gear"></i> إعدادات البوت</a>
-                </div>
-            `;
+        await new Promise((resolve, reject) => {
+            req.session.save(error => error ? reject(error) : resolve());
         });
+
+        return res.redirect('/dashboard');
+    } catch (error) {
+        console.error('Discord OAuth callback error:', error.response?.data || error.message);
+        return res.redirect('/?error=login');
     }
-
-    const html = `
-    <!DOCTYPE html>
-    <html lang="ar" dir="rtl">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>لوحة التحكم | ${BOT_NAME}</title>
-        <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
-        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-        <style>
-            * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Cairo', sans-serif; }
-            body { color: #ffffff; min-height: 100vh; background-color: #0f1219; position: relative; }
-            body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: url('${SITE_BG}') no-repeat center center/cover; z-index: -1; filter: brightness(0.35) blur(2px); }
-            .navbar { background: rgba(22, 27, 34, 0.85); padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; }
-            .user-profile { display: flex; align-items: center; gap: 12px; }
-            .user-avatar { width: 45px; height: 45px; border-radius: 50%; border: 2px solid #5865f2; }
-            .btn-logout { background: rgba(237, 66, 69, 0.2); color: #ed4245; padding: 8px 16px; border-radius: 8px; text-decoration: none; font-weight: 600; }
-            .container { max-width: 1100px; margin: 40px auto; padding: 0 20px; }
-            .guilds-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; }
-            .guild-card { background: rgba(24, 30, 41, 0.85); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 20px; display: flex; flex-direction: column; align-items: center; text-align: center; }
-            .guild-icon { width: 70px; height: 70px; border-radius: 20px; margin-bottom: 12px; object-fit: cover; }
-            .guild-name { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
-            .guild-id { font-size: 12px; color: #80848e; margin-bottom: 18px; }
-            .btn-manage { width: 100%; background: rgba(88,101,242,0.2); color: #5865f2; padding: 10px; border-radius: 10px; text-decoration: none; font-weight: 700; }
-        </style>
-    </head>
-    <body>
-        <div class="navbar">
-            <div class="user-profile"><img src="${userAvatar}" class="user-avatar"><span>أهلاً بك، ${user.username} 👋</span></div>
-            <a href="/logout" class="btn-logout"><i class="fa-solid fa-right-from-bracket"></i> تسجيل الخروج</a>
-        </div>
-        <div class="container">
-            <h2 style="margin-bottom: 25px;"><i class="fa-solid fa-server" style="color:#5865f2;"></i> اختر السيرفر لإدارة البوت</h2>
-            <div class="guilds-grid">${guildsCardsHtml}</div>
-        </div>
-    </body>
-    </html>
-    `;
-    res.send(html);
-});
-
-app.get('/dashboard/:guildId', async (req, res) => {
-    if (!req.session.user) return res.redirect('/login');
-    const guildId = String(req.params.guildId);
-    let guilds = req.session.guilds || [];
-    const guild = guilds.find(g => String(g.id) === guildId);
-    if (!guild) return res.send('❌ لا تملك صلاحيات لإدارة هذا السيرفر.');
-
-    const html = `
-    <!DOCTYPE html>
-    <html lang="ar" dir="rtl">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>إعدادات ${guild.name} | ${BOT_NAME}</title>
-        <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
-        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-        <style>
-            * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Cairo', sans-serif; }
-            body { color: #ffffff; min-height: 100vh; display: flex; flex-direction: column; background-color: #0f1219; position: relative; }
-            body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: url('${SITE_BG}') no-repeat center center/cover; z-index: -1; filter: brightness(0.35) blur(2px); }
-            .navbar { background: rgba(22, 27, 34, 0.85); padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; }
-            .btn-back { color: #5865f2; text-decoration: none; font-weight: 700; }
-            .main-layout { display: flex; flex: 1; max-width: 1200px; width: 100%; margin: 30px auto; gap: 25px; padding: 0 20px; }
-            .sidebar { width: 270px; background: rgba(24, 30, 41, 0.85); border-radius: 16px; padding: 15px; display: flex; flex-direction: column; gap: 8px; height: fit-content; }
-            .tab-btn { background: transparent; border: none; color: #949ba4; padding: 12px 16px; border-radius: 10px; cursor: pointer; text-align: right; font-weight: 700; display: flex; gap: 12px; }
-            .tab-btn.active { background: #5865f2; color: #fff; }
-            .content-panel { flex: 1; background: rgba(24, 30, 41, 0.85); border-radius: 16px; padding: 30px; }
-            .tab-content { display: none; }
-            .tab-content.active { display: block; }
-            h2 { font-size: 20px; font-weight: 800; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 12px; }
-            .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
-            .form-group { margin-bottom: 20px; }
-            label { display: block; margin-bottom: 8px; font-weight: 600; color: #b5bac1; font-size: 14px; }
-            input, select, textarea { width: 100%; padding: 12px; background: rgba(11, 14, 20, 0.7); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #fff; }
-            select option { background: #161b22; padding: 4px; }
-            .btn-save { background: #5865f2; color: #fff; border: none; padding: 12px 28px; border-radius: 8px; font-weight: 700; cursor: pointer; margin-top: 10px; }
-            .cmd-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 15px; }
-            .cmd-card { background: rgba(11, 14, 20, 0.7); padding: 15px; border-radius: 10px; }
-            .cmd-card label { color: #5865f2; font-weight: 700; font-size: 15px; display: block; margin-bottom: 5px; }
-            .hint { font-size: 11px; color: #949ba4; margin-top: 4px; }
-
-            /* تصميم القائمة المنسدلة الاحترافية المتعددة الرتب */
-            .custom-dropdown { position: relative; width: 100%; user-select: none; }
-            .dropdown-select-box { background: rgba(11, 14, 20, 0.7); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 12px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; color: #fff; min-height: 48px; }
-            .dropdown-options-container { position: absolute; top: 100%; left: 0; right: 0; background: #161b22; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; margin-top: 5px; max-height: 200px; overflow-y: auto; z-index: 99; display: none; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
-            .dropdown-options-container.open { display: block; }
-            .dropdown-option { padding: 10px 14px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: 0.2s; color: #b5bac1; font-size: 14px; border-bottom: 1px solid rgba(255,255,255,0.03); }
-            .dropdown-option:hover { background: rgba(88, 101, 242, 0.2); color: #fff; }
-            .dropdown-option input[type="checkbox"] { accent-color: #5865f2; width: 16px; height: 16px; cursor: pointer; }
-            .selected-tags { display: flex; flex-wrap: wrap; gap: 5px; }
-            .selected-tag { background: rgba(88, 101, 242, 0.25); color: #5865f2; padding: 3px 8px; border-radius: 6px; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; gap: 5px; border: 1px solid rgba(88, 101, 242, 0.4); }
-        </style>
-    </head>
-    <body>
-        <div class="navbar"><a href="/dashboard" class="btn-back"><i class="fa-solid fa-arrow-right"></i> العودة</a><span>سيرفر: <b>${guild.name}</b></span></div>
-        <div class="main-layout">
-            <div class="sidebar">
-                <button class="tab-btn active" onclick="openTab(event, 'botsettings')"><i class="fa-solid fa-robot"></i> إعدادات البوت</button>
-                <button class="tab-btn" onclick="openTab(event, 'channels')"><i class="fa-solid fa-hashtag"></i> الرومات والرتب</button>
-                <button class="tab-btn" onclick="openTab(event, 'design')"><i class="fa-solid fa-palette"></i> التصاميم والصور</button>
-                <button class="tab-btn" onclick="openTab(event, 'categories')"><i class="fa-solid fa-list-check"></i> أقسام القائمة</button>
-                <button class="tab-btn" onclick="openTab(event, 'cmdnames')"><i class="fa-solid fa-terminal"></i> أسماء الأوامر والبادئة</button>
-                <button class="tab-btn" onclick="openTab(event, 'permissions')"><i class="fa-solid fa-user-shield"></i> صلاحيات الأوامر</button>
-                <button class="tab-btn" onclick="openTab(event, 'points')"><i class="fa-solid fa-trophy"></i> إعدادات النقاط</button>
-            </div>
-            <div class="content-panel">
-                <div id="botsettings" class="tab-content active">
-                    <h2><i class="fa-solid fa-robot" style="color:#5865f2;"></i> إعدادات حالة واسم وصورة البوت</h2>
-                    <div class="form-grid">
-                        <div class="form-group"><label>اسم البوت (Bot Name):</label><input type="text" id="botName"></div>
-                        <div class="form-group"><label>رابط صورة البوت (Avatar URL):</label><input type="text" id="botAvatar"></div>
-                        <div class="form-group">
-                            <label>حالة البوت (Status):</label>
-                            <select id="botStatus">
-                                <option value="online">متصل (Online)</option>
-                                <option value="idle">مشغول / خامل (Idle)</option>
-                                <option value="dnd">عدم الإزعاج (Do Not Disturb)</option>
-                                <option value="invisible">مخفي (Invisible)</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>نوع النشاط (Activity Type):</label>
-                            <select id="activityType">
-                                <option value="0">يلعب (Playing)</option>
-                                <option value="2">يستمع إلى (Listening)</option>
-                                <option value="3">يشاهد (Watching)</option>
-                                <option value="5">في منافسة (Competing)</option>
-                            </select>
-                        </div>
-                        <div class="form-group" style="grid-column: 1 / -1;">
-                            <label>نص النشاط / الحالة (Activity Text):</label>
-                            <input type="text" id="activityText" placeholder="مثال: -help | نظام التذاكر">
-                        </div>
-                    </div>
-                    <button type="button" class="btn-save" onclick="saveBotSettings()"><i class="fa-solid fa-floppy-disk"></i> حفظ إعدادات البوت</button>
-                </div>
-
-                <div id="channels" class="tab-content">
-                    <h2>إعدادات الرومات والرتب الذكية</h2>
-                    <div class="form-grid">
-                        <div class="form-group"><label>رتبة الإدارة الرئيسية:</label><select id="staffRoleId" class="single-role-select"><option value="">جاري جلب الرتب...</option></select></div>
-                        <div class="form-group"><label>كاتيجوري التكتات:</label><input type="text" id="ticketCategoryId"></div>
-                        <div class="form-group"><label>روم السجلات:</label><input type="text" id="logChannelId"></div>
-                    </div>
-                    <button type="button" class="btn-save" onclick="saveChannels()">حفظ التغييرات</button>
-                </div>
-                <div id="design" class="tab-content">
-                    <h2>تخصيص نصوص وصور البانل والتكت</h2>
-                    <div class="form-group"><label>صورة البانل:</label><input type="text" id="panelImage"></div>
-                    <div class="form-group"><label>صورة التكت الداخلي:</label><input type="text" id="ticketImage"></div>
-                    <div class="form-group"><label>عنوان البانل:</label><input type="text" id="panelTitle"></div>
-                    <div class="form-group"><label>نص البانل:</label><textarea id="panelDescription" rows="3"></textarea></div>
-                    <button type="button" class="btn-save" onclick="saveDesign()">حفظ التصميم</button>
-                </div>
-                <div id="categories" class="tab-content">
-                    <h2>قائمة فتح التكتات</h2>
-                    <div class="form-group"><label>الخيار الأول:</label><input type="text" id="opt1_label"><input type="text" id="opt1_emoji" style="margin-top:5px;"><input type="text" id="opt1_desc" style="margin-top:5px;"></div>
-                    <div class="form-group"><label>الخيار الثاني:</label><input type="text" id="opt2_label"><input type="text" id="opt2_emoji" style="margin-top:5px;"><input type="text" id="opt2_desc" style="margin-top:5px;"></div>
-                    <div class="form-group"><label>الخيار الثالث:</label><input type="text" id="opt3_label"><input type="text" id="opt3_emoji" style="margin-top:5px;"><input type="text" id="opt3_desc" style="margin-top:5px;"></div>
-                    <button type="button" class="btn-save" onclick="saveCategories()">حفظ الأقسام</button>
-                </div>
-                <div id="cmdnames" class="tab-content">
-                    <h2>تخصيص الأوامر والبادئة</h2>
-                    <div class="form-group"><label>البادئة (Prefix):</label><input type="text" id="prefix"></div>
-                    <div class="cmd-grid">
-                        <div class="cmd-card"><label>أمر الإضافة</label><input type="text" id="alias_add"></div>
-                        <div class="cmd-card"><label>أمر المنشن</label><input type="text" id="alias_come"></div>
-                        <div class="cmd-card"><label>أمر تغيير الاسم</label><input type="text" id="alias_rename"></div>
-                        <div class="cmd-card"><label>أمر الاستلام</label><input type="text" id="alias_claim"></div>
-                        <div class="cmd-card"><label>أمر التايم أوت</label><input type="text" id="alias_timeout"></div>
-                        <div class="cmd-card"><label>أمر التحذير</label><input type="text" id="alias_warn"></div>
-                        <div class="cmd-card"><label>أمر إغلاق</label><input type="text" id="alias_close"></div>
-                        <div class="cmd-card"><label>أمر حذف</label><input type="text" id="alias_delete"></div>
-                        <div class="cmd-card"><label>إضافة نقاط</label><input type="text" id="alias_addpoints"></div>
-                        <div class="cmd-card"><label>خصم نقاط</label><input type="text" id="alias_removepoints"></div>
-                    </div>
-                    <button type="button" class="btn-save" onclick="saveAliases()">حفظ الأوامر</button>
-                </div>
-                
-                <!-- قسم صلاحيات الأوامر بالشكل الاحترافي المطلوب -->
-                <div id="permissions" class="tab-content">
-                    <h2>صلاحيات الأوامر المخصصة حسب الرتب</h2>
-                    <div class="cmd-grid">
-                        ${['add', 'come', 'rename', 'claim', 'timeout', 'warn', 'close', 'delete', 'addpoints', 'removepoints'].map(cmd => `
-                            <div class="cmd-card">
-                                <label>/${cmd}</label>
-                                <div class="custom-dropdown" id="dropdown_${cmd}">
-                                    <div class="dropdown-select-box" onclick="toggleDropdown('${cmd}')">
-                                        <span class="selected-tags" id="tags_${cmd}">اختر الرتب...</span>
-                                        <i class="fa-solid fa-chevron-down" style="color: #949ba4; font-size: 12px;"></i>
-                                    </div>
-                                    <div class="dropdown-options-container" id="options_${cmd}">
-                                        <!-- سيتم تعبئة الرتب ديناميكياً هنا -->
-                                    </div>
-                                </div>
-                                <div class="hint">اتركه فارغاً للجميع</div>
-                            </div>
-                        `).join('')}
-                    </div>
-                    <button type="button" class="btn-save" onclick="savePermissions()">حفظ الصلاحيات</button>
-                </div>
-
-                <div id="points" class="tab-content">
-                    <h2>النقاط والمهل</h2>
-                    <div class="form-grid">
-                        <div class="form-group"><label>نقاط الاستلام:</label><input type="number" id="claimPoints"></div>
-                        <div class="form-group"><label>نقاط التحذير:</label><input type="number" id="warnPoints"></div>
-                        <div class="form-group"><label>نقاط التايم أوت:</label><input type="number" id="timeoutPoints"></div>
-                        <div class="form-group"><label>مهلة rename:</label><input type="number" id="renameCooldown"></div>
-                    </div>
-                    <button type="button" class="btn-save" onclick="savePoints()">حفظ النقاط</button>
-                </div>
-            </div>
-        </div>
-        <script>
-            const currentGuildId = "${guild.id}";
-            let serverRoles = [];
-            const commandsList = ['add', 'come', 'rename', 'claim', 'timeout', 'warn', 'close', 'delete', 'addpoints', 'removepoints'];
-
-            async function loadRoles() {
-                try {
-                    const res = await fetch('/api/roles/' + currentGuildId + '?_t=' + Date.now());
-                    serverRoles = await res.json();
-                    
-                    const staffSelect = document.getElementById('staffRoleId');
-                    staffSelect.innerHTML = '<option value="">-- اختر رتبة الإدارة --</option>';
-                    serverRoles.forEach(role => {
-                        const opt = document.createElement('option');
-                        opt.value = role.id;
-                        opt.textContent = '🛡️ ' + role.name;
-                        staffSelect.appendChild(opt);
-                    });
-
-                    // تعبئة القوائم المنسدلة الاحترافية لكل أمر
-                    commandsList.forEach(cmd => {
-                        const container = document.getElementById('options_' + cmd);
-                        if (!container) return;
-                        container.innerHTML = '';
-                        serverRoles.forEach(role => {
-                            const div = document.createElement('div');
-                            div.className = 'dropdown-option';
-                            div.innerHTML = \`<input type="checkbox" value="\${role.id}" onchange="updateTags('\${cmd}')"> 🛡️ \${role.name}\`;
-                            div.onclick = (e) => {
-                                if (e.target.tagName !== 'INPUT') {
-                                    const cb = div.querySelector('input');
-                                    cb.checked = !cb.checked;
-                                    updateTags(cmd);
-                                }
-                            };
-                            container.appendChild(div);
-                        });
-                    });
-                } catch (err) { console.error('Error loading roles:', err); }
-            }
-
-            function toggleDropdown(cmd) {
-                document.querySelectorAll('.dropdown-options-container').forEach(el => {
-                    if (el.id !== 'options_' + cmd) el.classList.remove('open');
-                });
-                const container = document.getElementById('options_' + cmd);
-                container.classList.toggle('open');
-            }
-
-            window.addEventListener('click', (e) => {
-                if (!e.target.closest('.custom-dropdown')) {
-                    document.querySelectorAll('.dropdown-options-container').forEach(el => el.classList.remove('open'));
-                }
-            });
-
-            function updateTags(cmd) {
-                const container = document.getElementById('options_' + cmd);
-                const tagsContainer = document.getElementById('tags_' + cmd);
-                const checkedBoxes = container.querySelectorAll('input[type="checkbox"]:checked');
-
-                if (checkedBoxes.length === 0) {
-                    tagsContainer.innerHTML = '<span style="color:#949ba4;">اختر الرتب...</span>';
-                    return;
-                }
-
-                let html = '';
-                checkedBoxes.forEach(cb => {
-                    const roleName = cb.parentElement.textContent.trim();
-                    html += \`<span class="selected-tag">\${roleName}</span>\`;
-                });
-                tagsContainer.innerHTML = html;
-            }
-
-            window.addEventListener('DOMContentLoaded', async () => {
-                await loadRoles();
-                try {
-                    const res = await fetch('/api/settings/' + currentGuildId + '?_t=' + Date.now());
-                    const data = await res.json();
-                    if (data && !data.error) {
-                        if (data.botName) document.getElementById('botName').value = data.botName;
-                        if (data.botAvatar) document.getElementById('botAvatar').value = data.botAvatar;
-                        if (data.botStatus) document.getElementById('botStatus').value = data.botStatus;
-                        if (data.activityType !== undefined) document.getElementById('activityType').value = data.activityType;
-                        if (data.activityText) document.getElementById('activityText').value = data.activityText;
-
-                        if (data.prefix) document.getElementById('prefix').value = data.prefix;
-                        if (data.staffRoleId) document.getElementById('staffRoleId').value = data.staffRoleId;
-                        if (data.ticketCategoryId) document.getElementById('ticketCategoryId').value = data.ticketCategoryId;
-                        if (data.logChannelId) document.getElementById('logChannelId').value = data.logChannelId;
-                        if (data.panelImage) document.getElementById('panelImage').value = data.panelImage;
-                        if (data.ticketImage) document.getElementById('ticketImage').value = data.ticketImage;
-                        if (data.panelTitle) document.getElementById('panelTitle').value = data.panelTitle;
-                        if (data.panelDescription) document.getElementById('panelDescription').value = data.panelDescription;
-                        if (data.claimPoints !== undefined) document.getElementById('claimPoints').value = data.claimPoints;
-                        if (data.warnPoints !== undefined) document.getElementById('warnPoints').value = data.warnPoints;
-                        if (data.timeoutPoints !== undefined) document.getElementById('timeoutPoints').value = data.timeoutPoints;
-                        if (data.renameCooldown !== undefined) document.getElementById('renameCooldown').value = data.renameCooldown;
-
-                        if (data.selectOptions && data.selectOptions.length >= 3) {
-                            for(let i=0; i<3; i++) {
-                                document.getElementById('opt'+(i+1)+'_label').value = data.selectOptions[i].label || '';
-                                document.getElementById('opt'+(i+1)+'_emoji').value = data.selectOptions[i].emoji || '';
-                                document.getElementById('opt'+(i+1)+'_desc').value = data.selectOptions[i].description || '';
-                            }
-                        }
-                        if (data.commandAliases) {
-                            ['add', 'come', 'rename', 'claim', 'timeout', 'warn', 'close', 'delete', 'addpoints', 'removepoints'].forEach(cmd => {
-                                const el = document.getElementById('alias_' + cmd);
-                                if (el && data.commandAliases[cmd]) el.value = data.commandAliases[cmd];
-                            });
-                        }
-                        if (data.commandPermissions) {
-                            commandsList.forEach(cmd => {
-                                const allowedRoles = data.commandPermissions[cmd];
-                                if (Array.isArray(allowedRoles)) {
-                                    const container = document.getElementById('options_' + cmd);
-                                    if (container) {
-                                        container.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-                                            if (allowedRoles.includes(cb.value)) {
-                                                cb.checked = true;
-                                            }
-                                        });
-                                        updateTags(cmd);
-                                    }
-                                }
-                            });
-                        }
-                    }
-                } catch (e) { console.error('Fetch error:', e); }
-            });
-
-            function openTab(evt, tabName) {
-                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-                document.getElementById(tabName).classList.add('active');
-                evt.currentTarget.classList.add('active');
-            }
-
-            async function postPayload(payload, msg) {
-                try {
-                    const res = await fetch('/api/settings/' + currentGuildId + '?_t=' + Date.now(), {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
-                    const result = await res.json();
-                    if (result.success) alert(msg); else alert('❌ حدث خطأ.');
-                } catch (err) { alert('❌ تعذر الاتصال.'); }
-            }
-
-            function saveBotSettings() {
-                postPayload({
-                    botName: document.getElementById('botName').value.trim(),
-                    botAvatar: document.getElementById('botAvatar').value.trim(),
-                    botStatus: document.getElementById('botStatus').value,
-                    activityType: Number(document.getElementById('activityType').value) || 0,
-                    activityText: document.getElementById('activityText').value.trim()
-                }, '✅ تم حفظ إعدادات البوت بنجاح!');
-            }
-            function saveChannels() {
-                postPayload({
-                    staffRoleId: document.getElementById('staffRoleId').value.trim(),
-                    ticketCategoryId: document.getElementById('ticketCategoryId').value.trim(),
-                    logChannelId: document.getElementById('logChannelId').value.trim()
-                }, '✅ تم الحفظ بنجاح!');
-            }
-            function saveDesign() {
-                postPayload({
-                    panelImage: document.getElementById('panelImage').value.trim(),
-                    ticketImage: document.getElementById('ticketImage').value.trim(),
-                    panelTitle: document.getElementById('panelTitle').value.trim(),
-                    panelDescription: document.getElementById('panelDescription').value.trim()
-                }, '✅ تم الحفظ بنجاح!');
-            }
-            function saveCategories() {
-                const selectOptions = [
-                    { label: document.getElementById('opt1_label').value.trim(), value: 'inquiry', emoji: document.getElementById('opt1_emoji').value.trim(), description: document.getElementById('opt1_desc').value.trim() },
-                    { label: document.getElementById('opt2_label').value.trim(), value: 'complaint', emoji: document.getElementById('opt2_emoji').value.trim(), description: document.getElementById('opt2_desc').value.trim() },
-                    { label: document.getElementById('opt3_label').value.trim(), value: 'technical', emoji: document.getElementById('opt3_emoji').value.trim(), description: document.getElementById('opt3_desc').value.trim() }
-                ];
-                postPayload({ selectOptions }, '✅ تم الحفظ بنجاح!');
-            }
-            function saveAliases() {
-                const commandAliases = {};
-                commandsList.forEach(cmd => {
-                    commandAliases[cmd] = document.getElementById('alias_' + cmd).value.trim() || cmd;
-                });
-                const prefix = document.getElementById('prefix').value.trim() || '-';
-                postPayload({ prefix, commandAliases }, '✅ تم الحفظ بنجاح!');
-            }
-            function savePermissions() {
-                const commandPermissions = {};
-                commandsList.forEach(cmd => {
-                    const container = document.getElementById('options_' + cmd);
-                    const selected = Array.from(container.querySelectorAll('input[type="checkbox"]:checked')).map(cb => cb.value);
-                    commandPermissions[cmd] = selected;
-                });
-                postPayload({ commandPermissions }, '✅ تم حفظ صلاحيات الأوامر بنجاح!');
-            }
-            function savePoints() {
-                postPayload({
-                    claimPoints: Number(document.getElementById('claimPoints').value) || 1,
-                    warnPoints: Number(document.getElementById('warnPoints').value) || 1,
-                    timeoutPoints: Number(document.getElementById('timeoutPoints').value) || 1,
-                    renameCooldown: Number(document.getElementById('renameCooldown').value) || 10
-                }, '✅ تم الحفظ بنجاح!');
-            }
-        </script>
-    </body>
-    </html>
-    `;
-    res.send(html);
 });
 
 app.get('/logout', (req, res) => {
-    req.session.destroy(() => { res.redirect('/'); });
+    if (!req.session) return res.redirect('/');
+
+    req.session.destroy(() => {
+        res.clearCookie('connect.sid');
+        res.redirect('/');
+    });
 });
 
-module.exports = app;
+app.get('/', (req, res) => {
+    if (req.session?.user) return res.redirect('/dashboard');
+
+    const botName = escapeHtml(BOT_NAME);
+    const botAvatar = validUrl(BOT_AVATAR) ? BOT_AVATAR : '';
+    const background = validUrl(SITE_BG) ? SITE_BG : '';
+
+    res.set('Cache-Control', 'no-store');
+
+    return res.send(`<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${botName} - لوحة التحكم</title>
+<meta property="og:title" content="${botName} - لوحة التحكم">
+<meta property="og:description" content="إدارة إعدادات بوت التذاكر بسهولة">
+<meta property="og:image" content="${escapeHtml(botAvatar)}">
+<style>
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;font-family:Arial,sans-serif;color:#fff;background:#101116 ${background ? `url('${escapeHtml(background)}') center/cover fixed` : ''};display:flex;align-items:center;justify-content:center;padding:20px}
+body:before{content:"";position:fixed;inset:0;background:rgba(10,11,18,.82);z-index:-1}
+.card{width:100%;max-width:460px;background:rgba(27,29,40,.96);border:1px solid #343748;border-radius:22px;padding:34px;text-align:center;box-shadow:0 18px 60px #0005}
+.avatar{width:100px;height:100px;border-radius:50%;object-fit:cover;background:#383b4b}
+h1{font-size:27px;margin:18px 0 10px}
+p{color:#b9bdcd;line-height:1.8}
+a.btn{display:block;margin-top:24px;padding:14px;border-radius:12px;background:#5865f2;color:#fff;text-decoration:none;font-weight:bold}
+a.btn:hover{background:#4752c4}
+.small{font-size:13px;color:#9095a8;margin-top:22px}
+</style>
+</head>
+<body>
+<div class="card">
+${botAvatar ? `<img class="avatar" src="${escapeHtml(botAvatar)}" alt="Bot">` : ''}
+<h1>${botName}</h1>
+<p>لوحة تحكم بوت التذاكر. سجّل دخولك باستخدام Discord لإدارة إعدادات السيرفرات التي تملك صلاحية إدارتها والبوت موجود فيها.</p>
+<a class="btn" href="/login">تسجيل الدخول عبر Discord</a>
+<div class="small">تسجيل الدخول آمن عبر Discord OAuth2</div>
+</div>
+</body>
+</html>`);
+});
+
+app.get('/dashboard', requireLogin, async (req, res) => {
+    try {
+        const guilds = await getFreshUserGuilds(req);
+        const user = req.session.user;
+        const username = escapeHtml(user.global_name || user.username);
+        const userAvatar = user.avatar
+            ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=128`
+            : 'https://cdn.discordapp.com/embed/avatars/0.png';
+
+        const guildCards = guilds.map(guild => {
+            const icon = guild.icon
+                ? `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png?size=128`
+                : 'https://cdn.discordapp.com/embed/avatars/0.png';
+
+            return `
+            <a class="guild" href="/dashboard/${encodeURIComponent(guild.id)}">
+                <img src="${escapeHtml(icon)}" alt="">
+                <div class="guild-info">
+                    <strong>${escapeHtml(guild.name || 'سيرفر بدون اسم')}</strong>
+                    <span>فتح لوحة التحكم</span>
+                </div>
+                <span class="arrow">←</span>
+            </a>`;
+        }).join('');
+
+        res.set('Cache-Control', 'no-store');
+
+        return res.send(`<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>السيرفرات - ${escapeHtml(BOT_NAME)}</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#101116;color:#f5f5fa;font-family:Arial,sans-serif;padding:22px}
+header{max-width:1000px;margin:0 auto 28px;display:flex;align-items:center;justify-content:space-between;gap:15px;flex-wrap:wrap}
+.brand{font-size:22px;font-weight:bold}
+.profile{display:flex;align-items:center;gap:10px;color:#d6d8e3}
+.profile img{width:38px;height:38px;border-radius:50%}
+a{color:inherit;text-decoration:none}
+.logout{padding:10px 14px;background:#292c3a;border-radius:10px;font-size:14px}
+main{max-width:1000px;margin:auto}
+h1{font-size:28px;margin-bottom:8px}
+.subtitle{color:#a6aabd;line-height:1.7;margin-bottom:24px}
+.guilds{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}
+.guild{display:flex;align-items:center;gap:13px;padding:17px;background:#1b1d28;border:1px solid #303344;border-radius:15px;transition:.15s}
+.guild:hover{border-color:#6874ff;transform:translateY(-2px)}
+.guild img{width:54px;height:54px;border-radius:16px;object-fit:cover;background:#303344}
+.guild-info{min-width:0;flex:1}
+.guild-info strong{display:block;overflow-wrap:anywhere;font-size:15px}
+.guild-info span{display:block;color:#a6aabd;font-size:12px;margin-top:7px}
+.arrow{font-size:20px;color:#929bff}
+.empty{padding:25px;border:1px solid #303344;border-radius:15px;background:#1b1d28;color:#c4c7d5;line-height:1.9}
+@media(max-width:500px){body{padding:15px}h1{font-size:24px}.guild{padding:13px}}
+</style>
+</head>
+<body>
+<header>
+    <div class="brand">${escapeHtml(BOT_NAME)} | لوحة التحكم</div>
+    <div class="profile">
+        <img src="${escapeHtml(userAvatar)}" alt="">
+        <span>${username}</span>
+        <a class="logout" href="/logout">تسجيل الخروج</a>
+    </div>
+</header>
+<main>
+    <h1>اختر السيرفر</h1>
+    <div class="subtitle">اختر سيرفرًا لإدارة إعدادات البوت وصلاحيات الأوامر.</div>
+    <div class="guilds">
+        ${guildCards || '<div class="empty">لم يتم العثور على سيرفرات يمكنك إدارتها والبوت موجود فيها. تأكد من صلاحيات حسابك وأن البوت موجود في السيرفر.</div>'}
+    </div>
+</main>
+</body>
+</html>`);
+    } catch (error) {
+        console.error('Dashboard error:', error.response?.data || error.message);
+
+        if (['Discord session expired', 'Discord login required'].includes(error.message)) {
+            return res.redirect('/');
+        }
+
+        return res.status(500).send('حدث خطأ أثناء تحميل السيرفرات. تأكد من إعدادات Discord OAuth وتوكن البوت.');
+    }
+});
+
+app.get('/dashboard/:guildId', requireLogin, async (req, res) => {
+    try {
+        const guildId = req.params.guildId;
+
+        if (!validSnowflake(guildId)) {
+            return res.status(400).send('معرّف السيرفر غير صحيح.');
+        }
+
+        if (!(await isAuthorizedGuild(req, guildId))) {
+            return res.status(403).send('ليس لديك صلاحية إدارة هذا السيرفر أو البوت غير موجود فيه.');
+        }
+
+        let guildName = 'إعدادات السيرفر';
+
+        try {
+            const guildResponse = await axios.get(`${API}/guilds/${guildId}`, {
+                headers: { Authorization: `Bot ${BOT_TOKEN}` },
+                timeout: 10000
+            });
+
+            guildName = guildResponse.data.name || guildName;
+        } catch (error) {
+            console.error('Guild name error:', error.response?.status || error.message);
+        }
+
+        res.set('Cache-Control', 'no-store');
+
+        return res.send(`<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>إعدادات السيرفر - ${escapeHtml(BOT_NAME)}</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#101116;color:#f5f5fa;font-family:Arial,sans-serif}
+header{padding:18px 22px;background:#191b26;border-bottom:1px solid #303344;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.brand{font-weight:bold;font-size:19px}
+header a{color:#cdd0df;text-decoration:none;background:#292c3a;padding:10px 13px;border-radius:9px;font-size:13px}
+main{max-width:1100px;margin:25px auto;padding:0 16px 40px}
+h1{font-size:27px;margin:0 0 8px}
+.sub{color:#a6aabd;margin-bottom:22px;line-height:1.7}
+.layout{display:grid;grid-template-columns:220px minmax(0,1fr);gap:18px;align-items:start}
+nav{background:#1b1d28;border:1px solid #303344;border-radius:14px;padding:8px;position:sticky;top:15px}
+nav button{width:100%;text-align:right;border:0;background:transparent;color:#bfc3d4;padding:13px 12px;border-radius:9px;cursor:pointer;font-size:14px}
+nav button.active,nav button:hover{background:#30344a;color:#fff}
+section.panel{display:none;background:#1b1d28;border:1px solid #303344;border-radius:15px;padding:20px}
+section.panel.active{display:block}
+h2{font-size:20px;margin:0 0 18px}
+h3{font-size:15px;margin:22px 0 12px;color:#dfe1ed}
+.field{margin-bottom:15px}
+label{display:block;font-size:13px;color:#cdd0df;margin-bottom:7px}
+input,textarea,select{width:100%;padding:11px 12px;border:1px solid #3a3e52;border-radius:9px;background:#12141c;color:#fff;font:inherit;outline:none}
+input:focus,textarea:focus,select:focus{border-color:#737eff}
+textarea{min-height:90px;resize:vertical}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.help{font-size:12px;color:#999fb4;margin-top:6px;line-height:1.6}
+.savebar{display:flex;align-items:center;gap:12px;margin-top:20px;flex-wrap:wrap}
+.save{border:0;background:#5865f2;color:white;padding:12px 20px;border-radius:10px;font-weight:bold;cursor:pointer}
+.save:hover{background:#4752c4}
+.save:disabled{opacity:.6;cursor:wait}
+#status{font-size:13px;color:#bfc3d4}
+.command{border:1px solid #35394b;padding:13px;border-radius:11px;margin-bottom:12px}
+.command strong{display:block;margin-bottom:10px;font-size:14px}
+.role-list{display:flex;flex-wrap:wrap;gap:8px}
+.role-choice{display:flex;align-items:center;gap:7px;background:#12141c;border:1px solid #3a3e52;padding:8px 10px;border-radius:8px;font-size:12px;max-width:100%}
+.role-choice input{width:auto;margin:0}
+.role-choice span{overflow-wrap:anywhere}
+.option{padding:14px;border:1px solid #35394b;border-radius:11px;margin-bottom:12px}
+.empty{color:#a6aabd;font-size:13px}
+.danger{color:#ffb0b0}
+@media(max-width:750px){.layout{grid-template-columns:1fr}nav{position:static;display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.grid{grid-template-columns:1fr}section.panel{padding:15px}header{padding:14px}}
+</style>
+</head>
+<body>
+<header>
+    <div class="brand">${escapeHtml(BOT_NAME)} | لوحة التحكم</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <a href="/dashboard">السيرفرات</a>
+        <a href="/logout">تسجيل الخروج</a>
+    </div>
+</header>
+<main>
+    <h1>${escapeHtml(guildName)}</h1>
+    <div class="sub">عدّل إعدادات البوت ثم اضغط «حفظ الإعدادات» لتطبيق التغييرات.</div>
+    <div class="layout">
+        <nav id="tabs">
+            <button class="active" data-tab="general">إعدادات البوت</button>
+            <button data-tab="channels">القنوات والرتب</button>
+            <button data-tab="panel">لوحة التذاكر</button>
+            <button data-tab="options">خيارات التذاكر</button>
+            <button data-tab="aliases">البادئة والاختصارات</button>
+            <button data-tab="permissions">صلاحيات الأوامر</button>
+            <button data-tab="points">النقاط والمهلة</button>
+        </nav>
+        <div>
+            <section class="panel active" id="general">
+                <h2>إعدادات البوت</h2>
+                <div class="field"><label for="botName">اسم البوت</label><input id="botName" maxlength="100" placeholder="اسم البوت"></div>
+                <div class="field"><label for="botAvatar">رابط صورة البوت</label><input id="botAvatar" type="url" placeholder="https://..."></div>
+                <div class="grid">
+                    <div class="field"><label for="botStatus">حالة البوت</label><select id="botStatus"><option value="online">متصل</option><option value="idle">خامل</option><option value="dnd">عدم الإزعاج</option><option value="invisible">مخفي</option></select></div>
+                    <div class="field"><label for="activityType">نوع النشاط</label><select id="activityType"><option value="0">يلعب</option><option value="2">يستمع إلى</option><option value="3">يشاهد</option><option value="5">يتنافس في</option></select></div>
+                </div>
+                <div class="field"><label for="activityText">نص النشاط</label><input id="activityText" maxlength="128" placeholder="مثال: الدعم الفني"></div>
+                <p class="help">تغيير هذه القيم في لوحة التحكم يحفظها في قاعدة البيانات. يجب أن يقرأها كود البوت ويطبّقها حتى يتغير نشاطه فعلياً.</p>
+            </section>
+
+            <section class="panel" id="channels">
+                <h2>القنوات والرتب</h2>
+                <div class="field"><label for="staffRoleId">معرّف رتبة الإدارة</label><input id="staffRoleId" placeholder="Role ID"></div>
+                <div class="field"><label for="ticketCategoryId">معرّف كاتيجوري التذاكر</label><input id="ticketCategoryId" placeholder="Category ID"></div>
+                <div class="field"><label for="logChannelId">معرّف قناة اللوق</label><input id="logChannelId" placeholder="Channel ID"></div>
+                <p class="help">لنسخ المعرّف في Discord، فعّل وضع المطوّر ثم اضغط مطولاً على الرتبة أو القناة واختر نسخ المعرّف.</p>
+            </section>
+
+            <section class="panel" id="panel">
+                <h2>لوحة التذاكر</h2>
+                <div class="field"><label for="panelTitle">عنوان اللوحة</label><input id="panelTitle" maxlength="200" placeholder="الدعم الفني"></div>
+                <div class="field"><label for="panelDescription">وصف اللوحة</label><textarea id="panelDescription" maxlength="2000" placeholder="اكتب وصف لوحة الدعم الفني"></textarea></div>
+                <div class="field"><label for="panelImage">رابط صورة اللوحة</label><input id="panelImage" type="url" placeholder="https://..."></div>
+                <div class="field"><label for="ticketImage">رابط صورة التذكرة</label><input id="ticketImage" type="url" placeholder="https://..."></div>
+                <p class="help">يجب أن تكون الروابط فارغة أو تبدأ بـ https:// أو http://.</p>
+            </section>
+
+            <section class="panel" id="options">
+                <h2>خيارات التذاكر</h2>
+                <div class="option">
+                    <h3>الخيار الأول: استفسار</h3>
+                    <div class="field"><label for="option0label">الاسم الظاهر</label><input id="option0label" maxlength="100"></div>
+                    <div class="field"><label for="option0emoji">الإيموجي</label><input id="option0emoji" maxlength="100"></div>
+                    <div class="field"><label for="option0description">الوصف</label><input id="option0description" maxlength="100" placeholder="استفسار عام"></div>
+                </div>
+                <div class="option">
+                    <h3>الخيار الثاني: شكوى</h3>
+                    <div class="field"><label for="option1label">الاسم الظاهر</label><input id="option1label" maxlength="100"></div>
+                    <div class="field"><label for="option1emoji">الإيموجي</label><input id="option1emoji" maxlength="100"></div>
+                    <div class="field"><label for="option1description">الوصف</label><input id="option1description" maxlength="100" placeholder="تقديم شكوى"></div>
+                </div>
+                <div class="option">
+                    <h3>الخيار الثالث: مشكلة تقنية</h3>
+                    <div class="field"><label for="option2label">الاسم الظاهر</label><input id="option2label" maxlength="100"></div>
+                    <div class="field"><label for="option2emoji">الإيموجي</label><input id="option2emoji" maxlength="100"></div>
+                    <div class="field"><label for="option2description">الوصف</label><input id="option2description" maxlength="100" placeholder="مشكلة تقنية"></div>
+                </div>
+            </section>
+
+            <section class="panel" id="aliases">
+                <h2>البادئة والاختصارات</h2>
+                <div class="field"><label for="prefix">بادئة الأوامر</label><input id="prefix" maxlength="5" placeholder="-"></div>
+                <p class="help">اترك اختصار الأمر فارغاً إذا كنت لا تريد اختصاراً مخصصاً له.</p>
+                <div id="aliasFields"></div>
+            </section>
+
+            <section class="panel" id="permissions">
+                <h2>صلاحيات الأوامر</h2>
+                <p class="help">إذا لم تختر أي رتبة لأمر، فسيكون متاحاً للجميع حسب منطق البوت. عند اختيار رتب، يُسمح لحاملي واحدة منها باستخدام الأمر. صلاحية Administrator يجب أن تظل مسموحة من داخل البوت.</p>
+                <div id="permissionFields"><div class="empty">جارٍ تحميل الرتب...</div></div>
+            </section>
+
+            <section class="panel" id="points">
+                <h2>النقاط والمهلة</h2>
+                <div class="grid">
+                    <div class="field"><label for="claimPoints">نقاط الاستلام</label><input id="claimPoints" type="number" min="0" max="1000"></div>
+                    <div class="field"><label for="warnPoints">نقاط التحذير</label><input id="warnPoints" type="number" min="0" max="1000"></div>
+                    <div class="field"><label for="timeoutPoints">نقاط التايم</label><input id="timeoutPoints" type="number" min="0" max="1000"></div>
+                    <div class="field"><label for="renameCooldown">مهلة إعادة تسمية التذكرة بالدقائق</label><input id="renameCooldown" type="number" min="0" max="1440"></div>
+                </div>
+                <p class="help">تأثير النقاط والمهلة يعتمد على أن كود البوت يقرأ هذه الإعدادات من قاعدة البيانات.</p>
+            </section>
+
+            <div class="savebar">
+                <button class="save" id="saveButton">حفظ الإعدادات</button>
+                <span id="status" role="status"></span>
+            </div>
+        </div>
+    </div>
+</main>
+<script>
+(function () {
+    const guildId = ${JSON.stringify(guildId)};
+    const commandNames = {
+        add: 'إضافة عضو -add',
+        come: 'استدعاء إداري -come',
+        rename: 'إعادة تسمية -rename',
+        claim: 'استلام التذكرة',
+        timeout: 'تايم عضو -تايم',
+        warn: 'تحذير عضو -تحذير',
+        close: 'قفل التذكرة',
+        delete: 'حذف التذكرة',
+        addpoints: 'إضافة نقاط',
+        removepoints: 'إزالة نقاط'
+    };
+
+    let currentSettings = {};
+    let roles = [];
+
+    document.querySelectorAll('#tabs button').forEach(function (button) {
+        button.addEventListener('click', function () {
+            document.querySelectorAll('#tabs button').forEach(function (item) {
+                item.classList.remove('active');
+            });
+
+            document.querySelectorAll('section.panel').forEach(function (panel) {
+                panel.classList.remove('active');
+            });
+
+            button.classList.add('active');
+            document.getElementById(button.dataset.tab).classList.add('active');
+        });
+    });
+
+    function setValue(id, value) {
+        const element = document.getElementById(id);
+
+        if (element && value !== undefined && value !== null) {
+            element.value = value;
+        }
+    }
+
+    function getValue(id) {
+        const element = document.getElementById(id);
+        return element ? element.value : '';
+    }
+
+    function makeAliasFields(settings) {
+        const container = document.getElementById('aliasFields');
+        container.innerHTML = '';
+
+        Object.keys(commandNames).forEach(function (command) {
+            const field = document.createElement('div');
+            field.className = 'field';
+
+            const label = document.createElement('label');
+            label.htmlFor = 'alias_' + command;
+            label.textContent = commandNames[command];
+
+            const input = document.createElement('input');
+            input.id = 'alias_' + command;
+            input.maxLength = 32;
+            input.placeholder = 'اختصار اختياري';
+            input.value = settings.commandAliases && settings.commandAliases[command] !== undefined
+                ? settings.commandAliases[command]
+                : '';
+
+            field.appendChild(label);
+            field.appendChild(input);
+            container.appendChild(field);
+        });
+    }
+
+    function makePermissionFields(settings) {
+        const container = document.getElementById('permissionFields');
+        container.innerHTML = '';
+
+        if (!roles.length) {
+            container.innerHTML = '<div class="empty">لم يتم العثور على رتب قابلة للاختيار.</div>';
+            return;
+        }
+
+        Object.keys(commandNames).forEach(function (command) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'command';
+
+            const title = document.createElement('strong');
+            title.textContent = commandNames[command];
+            wrapper.appendChild(title);
+
+            const list = document.createElement('div');
+            list.className = 'role-list';
+
+            const selected = settings.commandPermissions && Array.isArray(settings.commandPermissions[command])
+                ? settings.commandPermissions[command]
+                : [];
+
+            roles.forEach(function (role) {
+                const label = document.createElement('label');
+                label.className = 'role-choice';
+
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.dataset.command = command;
+                checkbox.value = role.id;
+                checkbox.checked = selected.includes(role.id);
+
+                const name = document.createElement('span');
+                name.textContent = role.name;
+
+                label.appendChild(checkbox);
+                label.appendChild(name);
+                list.appendChild(label);
+            });
+
+            wrapper.appendChild(list);
+            container.appendChild(wrapper);
+        });
+    }
+
+    function fillForm(settings) {
+        const textFields = [
+            'botName', 'botAvatar', 'botStatus', 'activityType', 'activityText',
+            'staffRoleId', 'ticketCategoryId', 'logChannelId', 'panelTitle',
+            'panelDescription', 'panelImage', 'ticketImage', 'prefix',
+            'claimPoints', 'warnPoints', 'timeoutPoints', 'renameCooldown'
+        ];
+
+        textFields.forEach(function (key) {
+            setValue(key, settings[key]);
+        });
+
+        const options = Array.isArray(settings.selectOptions) ? settings.selectOptions : [];
+
+        for (let i = 0; i < 3; i++) {
+            const option = options[i] || {};
+            setValue('option' + i + 'label', option.label || ['استفسار', 'شكوى', 'مشكلة تقنية'][i]);
+            setValue('option' + i + 'emoji', option.emoji || '');
+            setValue('option' + i + 'description', option.description || '');
+        }
+
+        makeAliasFields(settings);
+        makePermissionFields(settings);
+    }
+
+    async function loadData() {
+        const status = document.getElementById('status');
+        status.textContent = 'جارٍ تحميل الإعدادات...';
+
+        try {
+            const results = await Promise.all([
+                fetch('/api/settings/' + encodeURIComponent(guildId), { credentials: 'same-origin' }),
+                fetch('/api/roles/' + encodeURIComponent(guildId), { credentials: 'same-origin' })
+            ]);
+
+            if (!results[0].ok || !results[1].ok) {
+                if (results.some(response => response.status === 401)) {
+                    window.location.href = '/';
+                    return;
+                }
+
+                throw new Error('تعذّر تحميل البيانات. حدّث الصفحة أو سجّل الدخول من جديد.');
+            }
+
+            currentSettings = await results[0].json();
+            roles = await results[1].json();
+
+            fillForm(currentSettings);
+            status.textContent = '';
+        } catch (error) {
+            status.textContent = error.message || 'حدث خطأ أثناء التحميل.';
+        }
+    }
+
+    function collectPermissions() {
+        const permissions = {};
+
+        Object.keys(commandNames).forEach(function (command) {
+            permissions[command] = [];
+        });
+
+        document.querySelectorAll('#permissionFields input[type="checkbox"]:checked').forEach(function (checkbox) {
+            permissions[checkbox.dataset.command].push(checkbox.value);
+        });
+
+        return permissions;
+    }
+
+    function collectAliases() {
+        const aliases = {};
+
+        Object.keys(commandNames).forEach(function (command) {
+            aliases[command] = getValue('alias_' + command).trim();
+        });
+
+        return aliases;
+    }
+
+    function collectOptions() {
+        return [
+            {
+                label: getValue('option0label').trim(),
+                value: 'inquiry',
+                emoji: getValue('option0emoji').trim(),
+                description: getValue('option0description').trim()
+            },
+            {
+                label: getValue('option1label').trim(),
+                value: 'complaint',
+                emoji: getValue('option1emoji').trim(),
+                description: getValue('option1description').trim()
+            },
+            {
+                label: getValue('option2label').trim(),
+                value: 'technical',
+                emoji: getValue('option2emoji').trim(),
+                description: getValue('option2description').trim()
+            }
+        ];
+    }
+
+    document.getElementById('saveButton').addEventListener('click', async function () {
+        const button = this;
+        const status = document.getElementById('status');
+
+        button.disabled = true;
+        status.textContent = 'جارٍ حفظ الإعدادات...';
+
+        const payload = {
+            botName: getValue('botName').trim(),
+            botAvatar: getValue('botAvatar').trim(),
+            botStatus: getValue('botStatus'),
+            activityType: Number(getValue('activityType')),
+            activityText: getValue('activityText').trim(),
+            staffRoleId: getValue('staffRoleId').trim(),
+            ticketCategoryId: getValue('ticketCategoryId').trim(),
+            logChannelId: getValue('logChannelId').trim(),
+            panelTitle: getValue('panelTitle').trim(),
+            panelDescription: getValue('panelDescription').trim(),
+            panelImage: getValue('panelImage').trim(),
+            ticketImage: getValue('ticketImage').trim(),
+            selectOptions: collectOptions(),
+            prefix: getValue('prefix'),
+            commandAliases: collectAliases(),
+            commandPermissions: collectPermissions(),
+            claimPoints: Number(getValue('claimPoints')),
+            warnPoints: Number(getValue('warnPoints')),
+            timeoutPoints: Number(getValue('timeoutPoints')),
+            renameCooldown: Number(getValue('renameCooldown'))
+        };
+
+        try {
+            const response = await fetch('/api/settings/' + encodeURIComponent(guildId), {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            const result = await response.json().catch(function () {
+                return {};
+            });
+
+            if (response.status === 401) {
+                window.location.href = '/';
+                return;
+            }
+
+            if (!response.ok) {
+                throw new Error(result.error || 'فشل حفظ الإعدادات.');
+            }
+
+            currentSettings = result.settings || currentSettings;
+            status.textContent = 'تم حفظ الإعدادات بنجاح.';
+        } catch (error) {
+            status.textContent = error.message || 'حدث خطأ أثناء الحفظ.';
+        } finally {
+            button.disabled = false;
+        }
+    });
+
+    loadData();
+})();
+</script>
+</body>
+</html>`);
+    } catch (error) {
+        console.error('Guild settings page error:', error.response?.data || error.message);
+
+        if (['Discord session expired', 'Discord login required'].includes(error.message)) {
+            return res.redirect('/');
+        }
+
+        return res.status(500).send('حدث خطأ أثناء فتح إعدادات السيرفر.');
+    }
+});
+
+app.use((req, res) => {
+    res.status(404).send('الصفحة غير موجودة.');
+});
 
 if (process.env.NODE_ENV !== 'production') {
-    app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+    app.listen(PORT, () => {
+        console.log(`Dashboard running on port ${PORT}`);
+    });
 }
+
+module.exports = app;

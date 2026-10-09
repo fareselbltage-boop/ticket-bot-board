@@ -17,18 +17,6 @@ const BOT_NAME = process.env.BOT_NAME || 'Light Ticket Bot';
 const BOT_AVATAR = process.env.BOT_AVATAR || 'https://i.postimg.cc/tJW3r0PJ/Screenshot-20261001-232609-ibis-Paint-X.jpg';
 const SITE_BG = 'https://i.postimg.cc/s2x5kG7S/1791496064027.jpg';
 
-if (!process.env.SESSION_SECRET) {
-    console.warn('WARNING: Set SESSION_SECRET in your hosting environment.');
-}
-
-if (!process.env.CLIENT_ID || !process.env.CLIENT_SECRET) {
-    console.warn('WARNING: Discord OAuth CLIENT_ID or CLIENT_SECRET is missing.');
-}
-
-if (!BOT_TOKEN) {
-    console.warn('WARNING: BOT_TOKEN / TOKEN is missing.');
-}
-
 if (!MONGO_URI) {
     console.warn('WARNING: MONGO_URI is missing.');
 } else {
@@ -52,8 +40,6 @@ const defaultAliases = {
     timeout: [{ alias: 'تايم', active: true }],
     untimeout: [{ alias: 'فك-تايم', active: true }],
     warn: [{ alias: 'تحذير', active: true }],
-    unwarn: [{ alias: 'فك-تحذير', active: true }],
-    warns: [{ alias: 'تحذيرات', active: true }],
     close: [{ alias: 'اغلاق', active: true }],
     delete: [{ alias: 'حذف', active: true }],
     addpoints: [{ alias: 'addpoints', active: true }],
@@ -121,6 +107,33 @@ app.use(session({
     }
 }));
 
+const COMMANDS = [
+    'add', 'come', 'rename', 'claim', 'timeout', 'untimeout',
+    'warn', 'close', 'delete', 'addpoints', 'removepoints', 'resettop'
+];
+
+const COMMAND_NAMES = {
+    add: 'إضافة عضو (add)',
+    come: 'استدعاء إداري (come)',
+    rename: 'إعادة تسمية (rename)',
+    claim: 'استلام التذكرة (claim)',
+    timeout: 'تايم أوت عضو (timeout)',
+    untimeout: 'إلغاء التايم أوت (untimeout)',
+    warn: 'تحذير عضو (warn)',
+    close: 'قفل التذكرة (close)',
+    delete: 'حذف التذكرة (delete)',
+    addpoints: 'إضافة نقاط (addpoints)',
+    removepoints: 'إزالة نقاط (removepoints)',
+    resettop: 'تصفير توب النقاط (reset top)'
+};
+
+const POINT_COMMANDS = {
+    claim: 'استلام التكت (claim)',
+    warn: 'تحذير عضو (warn)',
+    timeout: 'تايم أوت (timeout)',
+    close: 'إغلاق التكت (close)'
+};
+
 const ALLOWED_FIELDS = [
     'prefix', 'staffRoleId', 'ticketCategoryId', 'logChannelId',
     'panelImage', 'ticketImage', 'panelTitle', 'panelDescription',
@@ -136,6 +149,7 @@ function validSnowflake(value) {
 function validUrl(value) {
     if (typeof value !== 'string' || value.length > 2048) return false;
     if (!value.trim()) return true;
+
     try {
         const url = new URL(value);
         return url.protocol === 'https:' || url.protocol === 'http:';
@@ -156,11 +170,13 @@ function escapeHtml(value = '') {
 
 function plainSettings(settings) {
     const obj = settings.toObject();
+
     for (const key of ['commandPermissions', 'commandAliases']) {
         if (obj[key] instanceof Map) {
             obj[key] = Object.fromEntries(obj[key]);
         }
     }
+
     return obj;
 }
 
@@ -171,11 +187,14 @@ function requireLogin(req, res, next) {
             req.session.accessToken = null;
             req.session.refreshToken = null;
         }
+
         if (req.path.startsWith('/api/')) {
-            return res.status(401).json({ error: 'انتهت جلسة تسجيل الدخول.' });
+            return res.status(401).json({ error: 'انتهت جلسة تسجيل الدخول. سجّل دخولك مجدداً.' });
         }
+
         return res.redirect('/?error=login');
     }
+
     next();
 }
 
@@ -183,16 +202,20 @@ async function getFreshUserGuilds(req, forceRefresh = false) {
     if (!forceRefresh && req.session.guilds && Array.isArray(req.session.guilds) && req.session.guilds.length > 0) {
         return req.session.guilds;
     }
+
     let accessToken = req.session.accessToken;
+
     async function fetchGuilds(token) {
         const response = await axios.get(`${API}/users/@me/guilds`, {
             headers: { Authorization: `Bearer ${token}` },
             timeout: 10000
         });
+
         const manageableGuilds = response.data.filter(guild => {
             const permissions = BigInt(guild.permissions || '0');
             return (permissions & 8n) === 8n || (permissions & 32n) === 32n;
         });
+
         const checks = await Promise.all(
             manageableGuilds.map(async guild => {
                 try {
@@ -201,13 +224,15 @@ async function getFreshUserGuilds(req, forceRefresh = false) {
                         timeout: 7000
                     });
                     return guild;
-                } catch {
+                } catch (error) {
                     return null;
                 }
             })
         );
+
         return checks.filter(Boolean);
     }
+
     if (accessToken) {
         try {
             const guilds = await fetchGuilds(accessToken);
@@ -220,6 +245,7 @@ async function getFreshUserGuilds(req, forceRefresh = false) {
             }
         }
     }
+
     if (req.session.refreshToken) {
         try {
             const refreshResponse = await axios.post(
@@ -230,79 +256,119 @@ async function getFreshUserGuilds(req, forceRefresh = false) {
                     grant_type: 'refresh_token',
                     refresh_token: req.session.refreshToken
                 }).toString(),
-                { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, timeout: 10000 }
+                {
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    timeout: 10000
+                }
             );
+
             accessToken = refreshResponse.data.access_token;
             req.session.accessToken = accessToken;
             if (refreshResponse.data.refresh_token) {
                 req.session.refreshToken = refreshResponse.data.refresh_token;
             }
+
             const guilds = await fetchGuilds(accessToken);
             req.session.guilds = guilds;
             return guilds;
-        } catch {
+        } catch (error) {
             req.session.accessToken = null;
             req.session.refreshToken = null;
             throw new Error('Discord session expired');
         }
     }
+
     throw new Error('Discord login required');
+}
+
+async function isAuthorizedGuild(req, guildId) {
+    if (!req.session?.user || !validSnowflake(String(guildId))) {
+        return false;
+    }
+
+    const guilds = await getFreshUserGuilds(req);
+    return guilds.some(guild => String(guild.id) === String(guildId));
 }
 
 app.get('/login', (req, res) => {
     const clientId = process.env.CLIENT_ID;
+
+    if (!clientId || !process.env.CLIENT_SECRET || !REDIRECT_URI) {
+        return res.status(500).send('إعدادات تسجيل الدخول غير مكتملة.');
+    }
+
     const params = new URLSearchParams({
         client_id: clientId,
         redirect_uri: REDIRECT_URI,
         response_type: 'code',
         scope: 'identify guilds'
     });
+
     return res.redirect(`https://discord.com/oauth2/authorize?${params.toString()}`);
 });
 
 app.get('/api/auth/callback', async (req, res) => {
     try {
         const code = req.query.code;
-        if (!code) return res.redirect('/?error=login');
+
+        if (typeof code !== 'string' || !code) {
+            return res.redirect('/?error=login');
+        }
+
+        const clientId = process.env.CLIENT_ID;
+        const clientSecret = process.env.CLIENT_SECRET;
+
         const tokenResponse = await axios.post(
             `${API}/oauth2/token`,
             new URLSearchParams({
-                client_id: process.env.CLIENT_ID,
-                client_secret: process.env.CLIENT_SECRET,
+                client_id: clientId,
+                client_secret: clientSecret,
                 grant_type: 'authorization_code',
                 code,
                 redirect_uri: REDIRECT_URI
             }).toString(),
-            { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, timeout: 15000 }
+            {
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                timeout: 15000
+            }
         );
+
         const accessToken = tokenResponse.data.access_token;
-        const refreshToken = tokenResponse.data.refreshToken;
+        const refreshToken = tokenResponse.data.refresh_token;
+
         const userResponse = await axios.get(`${API}/users/@me`, {
             headers: { Authorization: `Bearer ${accessToken}` },
             timeout: 15000
         });
+
         await new Promise((resolve, reject) => {
             req.session.regenerate(error => error ? reject(error) : resolve());
         });
+
         req.session.user = {
             id: userResponse.data.id,
             username: userResponse.data.username,
             global_name: userResponse.data.global_name || userResponse.data.username,
             avatar: userResponse.data.avatar
         };
+
         req.session.accessToken = accessToken;
         req.session.refreshToken = refreshToken;
+
         await new Promise((resolve, reject) => {
             req.session.save(error => error ? reject(error) : resolve());
         });
+
         return res.redirect('/dashboard');
-    } catch {
+    } catch (error) {
+        console.error('Discord OAuth callback error:', error.response?.data || error.message);
         return res.redirect('/?error=login');
     }
 });
 
 app.get('/logout', (req, res) => {
     if (!req.session) return res.redirect('/');
+
     req.session.destroy(() => {
         res.clearCookie('connect.sid');
         res.redirect('/');
@@ -313,389 +379,917 @@ app.get('/', (req, res) => {
     if (req.session?.user && (req.session.accessToken || req.session.refreshToken) && !req.query.error) {
         return res.redirect('/dashboard');
     }
-    return res.send(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>لوحة التحكم</title></head><body style="background:#0f1015;color:#fff;font-family:Arial;text-align:center;padding:50px;"><h1>${escapeHtml(BOT_NAME)}</h1><a href="/login" style="background:#5865f2;color:#fff;padding:12px 20px;text-decoration:none;border-radius:10px;font-weight:bold;">تسجيل الدخول عبر Discord</a></body></html>`);
+
+    const botName = escapeHtml(BOT_NAME);
+    const botAvatar = validUrl(BOT_AVATAR) ? BOT_AVATAR : '';
+    const background = validUrl(SITE_BG) ? SITE_BG : '';
+    const loginError = req.query.error === 'login'
+        ? '<p class="error">تعذّر تسجيل الدخول. حاول مرة أخرى.</p>'
+        : '';
+
+    res.set('Cache-Control', 'no-store');
+
+    return res.send(`<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${botName} - لوحة التحكم</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;font-family:Arial,sans-serif;color:#fff;background:#101116 ${background ? `url('${escapeHtml(background)}') center/cover fixed` : ''};display:flex;align-items:center;justify-content:center;padding:20px}
+body:before{content:"";position:fixed;inset:0;background:rgba(10,11,18,.82);z-index:-1}
+.card{width:100%;max-width:460px;background:rgba(27,29,40,.96);border:1px solid #343748;border-radius:22px;padding:34px;text-align:center;box-shadow:0 18px 60px #0005}
+.avatar{width:100px;height:100px;border-radius:50%;object-fit:cover;background:#383b4b}
+h1{font-size:27px;margin:18px 0 10px}
+p{color:#b9bdcd;line-height:1.8}
+a.btn{display:block;margin-top:24px;padding:14px;border-radius:12px;background:#5865f2;color:#fff;text-decoration:none;font-weight:bold}
+a.btn:hover{background:#4752c4}
+.small{font-size:13px;color:#9095a8;margin-top:22px}
+.error{color:#ffaaaa}
+</style>
+</head>
+<body>
+<div class="card">
+${botAvatar ? `<img class="avatar" src="${escapeHtml(botAvatar)}" alt="Bot">` : ''}
+<h1>${botName}</h1>
+<p>لوحة تحكم بوت التذاكر. سجّل دخولك باستخدام Discord لإدارة إعدادات السيرفرات التي تملك صلاحية إدارتها والبوت موجود فيها.</p>
+${loginError}
+<a class="btn" href="/login">تسجيل الدخول عبر Discord</a>
+<div class="small">تسجيل الدخول عبر Discord OAuth2</div>
+</div>
+</body>
+</html>`);
 });
 
 app.get('/dashboard', requireLogin, async (req, res) => {
     try {
         const guilds = await getFreshUserGuilds(req, true);
-        const guildCards = guilds.map(g => `<a href="/dashboard/${g.id}" style="display:flex;align-items:center;gap:15px;background:#181a24;color:#fff;padding:15px;margin:10px 0;border-radius:12px;text-decoration:none;border:1px solid #282b3a;"><strong>${escapeHtml(g.name)}</strong></a>`).join('');
-        return res.send(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>السيرفرات</title></head><body style="background:#0f1015;color:#fff;font-family:Arial;padding:30px;"><h1 style="text-align:center;">اختر سيرفر</h1><div style="max-width:500px;margin:auto;">${guildCards}</div></body></html>`);
-    } catch {
-        return res.redirect('/?error=login');
-    }
-});
+        const user = req.session.user;
+        const username = escapeHtml(user.global_name || user.username);
+        const userAvatar = user.avatar
+            ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=128`
+            : 'https://cdn.discordapp.com/embed/avatars/0.png';
 
-app.get('/api/roles/:guildId', requireLogin, async (req, res) => {
-    try {
-        const { guildId } = req.params;
-        const response = await axios.get(`${API}/guilds/${guildId}/roles`, {
-            headers: { Authorization: `Bot ${BOT_TOKEN}` }
-        });
-        const roles = response.data.filter(r => r.id !== guildId && !r.managed).map(r => ({ id: r.id, name: r.name }));
-        return res.json(roles);
-    } catch {
-        return res.status(500).json({ error: 'خطأ' });
-    }
-});
+        const guildCards = guilds.map(guild => {
+            const icon = guild.icon
+                ? `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png?size=128`
+                : 'https://cdn.discordapp.com/embed/avatars/0.png';
 
-app.get('/api/settings/:guildId', requireLogin, async (req, res) => {
-    try {
-        const { guildId } = req.params;
-        let settings = await GuildSettings.findOne({ guildId });
-        if (!settings) settings = await GuildSettings.create({ guildId });
-        return res.json(plainSettings(settings));
-    } catch {
-        return res.status(500).json({ error: 'خطأ' });
-    }
-});
+            return `
+<a class="guild" href="/dashboard/${encodeURIComponent(guild.id)}">
+    <img src="${escapeHtml(icon)}" alt="">
+    <div class="guild-info">
+        <strong>${escapeHtml(guild.name || 'سيرفر بدون اسم')}</strong>
+        <span>فتح لوحة التحكم</span>
+    </div>
+    <span class="arrow">←</span>
+</a>`;
+        }).join('');
 
-app.post('/api/settings/:guildId', requireLogin, async (req, res) => {
-    try {
-        const { guildId } = req.params;
-        const body = req.body || {};
-        const updates = {};
-        for (const key of Object.keys(body)) {
-            if (!ALLOWED_FIELDS.includes(key)) continue;
-            const value = body[key];
-            if (key === 'prefix') {
-                updates.prefix = String(value !== undefined ? value : '').trim();
-            } else if (key === 'renameCooldown') {
-                updates.renameCooldown = Number(value) || 0;
-            } else if (key === 'rolePointsConfig') {
-                if (Array.isArray(value)) {
-                    updates.rolePointsConfig = value.map(item => ({
-                        roleId: String(item.roleId || ''),
-                        commands: item.commands || {}
-                    })).filter(item => validSnowflake(item.roleId));
-                }
-            } else if (key === 'commandAliases') {
-                if (typeof value === 'object' && value !== null) {
-                    const cleanAliases = {};
-                    for (const [cmd, aliases] of Object.entries(value)) {
-                        if (Array.isArray(aliases)) {
-                            cleanAliases[cmd] = aliases.map(a => ({
-                                alias: String(a.alias || '').trim(),
-                                active: Boolean(a.active)
-                            })).filter(a => a.alias);
-                        }
-                    }
-                    updates.commandAliases = cleanAliases;
-                }
-            } else {
-                updates[key] = value;
-            }
-        }
-        let settings = await GuildSettings.findOne({ guildId });
-        if (!settings) settings = new GuildSettings({ guildId });
-        for (const [k, v] of Object.entries(updates)) {
-            settings.set(k, v);
-        }
-        await settings.save();
-        return res.json({ success: true, settings: plainSettings(settings) });
-    } catch {
-        return res.status(500).json({ error: 'خطأ أثناء الحفظ' });
-    }
-});
-
-app.get('/dashboard/:guildId', requireLogin, async (req, res) => {
-    try {
-        const guildId = req.params.guildId;
-        let guildName = 'إعدادات السيرفر';
-        try {
-            const r = await axios.get(`${API}/guilds/${guildId}`, { headers: { Authorization: `Bot ${BOT_TOKEN}` } });
-            guildName = r.data.name;
-        } catch {}
+        res.set('Cache-Control', 'no-store');
 
         return res.send(`<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>إعدادات السيرفر - ${escapeHtml(guildName)}</title>
+<title>السيرفرات - ${escapeHtml(BOT_NAME)}</title>
 <style>
 *{box-sizing:border-box}
-body{margin:0;background:#0f1015;color:#f5f5fa;font-family:Arial,sans-serif}
-header{padding:18px 25px;background:#141620;border-bottom:1px solid #232635;display:flex;justify-content:space-between;align-items:center}
-.brand{font-weight:bold;font-size:20px;color:#5865f2}
-header a{color:#cdd0df;text-decoration:none;background:#1e2130;padding:10px 15px;border-radius:10px;font-size:13px;transition:.2s}
-header a:hover{background:#2a2e43}
-main{max-width:1150px;margin:30px auto;padding:0 20px 50px}
-h1{font-size:28px;margin:0 0 8px}
-.sub{color:#9ca3af;margin-bottom:25px}
-.layout{display:grid;grid-template-columns:230px minmax(0,1fr);gap:20px;align-items:start}
-nav{background:#141620;border:1px solid #232635;border-radius:16px;padding:10px}
-nav button{width:100%;text-align:right;border:0;background:transparent;color:#9ca3af;padding:14px 15px;border-radius:10px;cursor:pointer;font-size:14px;font-weight:bold;transition:.2s;margin-bottom:4px}
-nav button.active,nav button:hover{background:#5865f2;color:#fff}
-section.panel{display:none;background:#141620;border:1px solid #232635;border-radius:16px;padding:25px}
-section.panel.active{display:block}
-h2{font-size:22px;margin:0 0 20px;color:#fff;border-bottom:1px solid #232635;padding-bottom:10px}
-.field{margin-bottom:18px}
-label{display:block;font-size:13px;color:#cbd5e1;margin-bottom:8px}
-input,textarea,select{width:100%;padding:12px 14px;border:1px solid #2a2e43;border-radius:10px;background:#0a0b0e;color:#fff;font:inherit;outline:none;transition:.2s}
-input:focus,textarea:focus,select:focus{border-color:#5865f2}
-.help{font-size:12px;color:#64748b;margin-top:6px}
-.savebar{display:flex;align-items:center;gap:15px;margin-top:25px}
-.save{border:0;background:#5865f2;color:white;padding:14px 25px;border-radius:12px;font-weight:bold;cursor:pointer;transition:.2s}
-.save:hover{background:#4752c4}
-.alias-card{background:#0a0b0e;border:1px solid #232635;padding:18px;border-radius:12px;margin-bottom:15px}
-.btn-sm{padding:8px 14px;border-radius:8px;border:0;cursor:pointer;font-size:12px;font-weight:bold}
-.btn-add{background:#22c55e;color:#fff}
-.btn-danger{background:#ef4444;color:#fff}
-#status{color:#22c55e;font-weight:bold}
+body{margin:0;background:#101116;color:#f5f5fa;font-family:Arial,sans-serif;padding:22px}
+header{max-width:1000px;margin:0 auto 28px;display:flex;align-items:center;justify-content:space-between;gap:15px;flex-wrap:wrap}
+.brand{font-size:22px;font-weight:bold}
+.profile{display:flex;align-items:center;gap:10px;color:#d6d8e3}
+.profile img{width:38px;height:38px;border-radius:50%}
+a{color:inherit;text-decoration:none}
+.logout{padding:10px 14px;background:#292c3a;border-radius:10px;font-size:14px}
+main{max-width:1000px;margin:auto}
+h1{font-size:28px;margin-bottom:8px}
+.subtitle{color:#a6aabd;line-height:1.7;margin-bottom:24px}
+.guilds{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}
+.guild{display:flex;align-items:center;gap:13px;padding:17px;background:#1b1d28;border:1px solid #303344;border-radius:15px;transition:.15s}
+.guild:hover{border-color:#6874ff;transform:translateY(-2px)}
+.guild img{width:54px;height:54px;border-radius:16px;object-fit:cover;background:#303344}
+.guild-info{min-width:0;flex:1}
+.guild-info strong{display:block;overflow-wrap:anywhere;font-size:15px}
+.guild-info span{display:block;color:#a6aabd;font-size:12px;margin-top:7px}
+.arrow{font-size:20px;color:#929bff}
+.empty{padding:25px;border:1px solid #303344;border-radius:15px;background:#1b1d28;color:#c4c7d5;line-height:1.9}
+@media(max-width:500px){body{padding:15px}h1{font-size:24px}.guild{padding:13px}}
 </style>
 </head>
 <body>
 <header>
-    <div class="brand">⚡ ${escapeHtml(BOT_NAME)}</div>
-    <div><a href="/dashboard">السيرفرات</a> <a href="/logout">تسجيل الخروج</a></div>
+    <div class="brand">${escapeHtml(BOT_NAME)} | لوحة التحكم</div>
+    <div class="profile">
+        <img src="${escapeHtml(userAvatar)}" alt="">
+        <span>${username}</span>
+        <a class="logout" href="/logout">تسجيل الخروج</a>
+    </div>
+</header>
+<main>
+    <h1>اختر السيرفر</h1>
+    <div class="subtitle">اختر سيرفرًا لإدارة إعدادات البوت وصلاحيات الأوامر.</div>
+    <div class="guilds">
+        ${guildCards || '<div class="empty">لم يتم العثور على سيرفرات يمكنك إدارتها والبوت موجود فيها.</div>'}
+    </div>
+</main>
+</body>
+</html>`);
+    } catch (error) {
+        if (error.message === 'Discord session expired' || error.message === 'Discord login required') {
+            if (req.session) {
+                req.session.user = null;
+                req.session.accessToken = null;
+                req.session.refreshToken = null;
+            }
+            return res.redirect('/?error=login');
+        }
+
+        return res.status(500).send('حدث خطأ أثناء تحميل السيرفرات.');
+    }
+});
+
+app.get('/api/roles/:guildId', requireLogin, async (req, res) => {
+    try {
+        const { guildId } = req.params;
+
+        if (!validSnowflake(guildId)) {
+            return res.status(400).json({ error: 'معرّف السيرفر غير صحيح.' });
+        }
+
+        if (!(await isAuthorizedGuild(req, guildId))) {
+            return res.status(403).json({ error: 'ليس لديك صلاحية إدارة هذا السيرفر أو البوت غير موجود فيه.' });
+        }
+
+        const response = await axios.get(`${API}/guilds/${guildId}/roles`, {
+            headers: { Authorization: `Bot ${BOT_TOKEN}` },
+            timeout: 15000
+        });
+
+        const roles = response.data
+            .filter(role => role.id !== guildId && !role.managed)
+            .map(role => ({
+                id: role.id,
+                name: role.name,
+                color: role.color
+            }));
+
+        res.set('Cache-Control', 'no-store');
+        return res.json(roles);
+    } catch (error) {
+        return res.status(500).json({ error: 'تعذّر تحميل الرتب من Discord.' });
+    }
+});
+
+app.get('/api/settings/:guildId', requireLogin, async (req, res) => {
+    try {
+        const { guildId } = req.params;
+
+        if (!validSnowflake(guildId)) {
+            return res.status(400).json({ error: 'معرّف السيرفر غير صحيح.' });
+        }
+
+        if (!(await isAuthorizedGuild(req, guildId))) {
+            return res.status(403).json({ error: 'غير مسموح لك بالوصول إلى إعدادات هذا السيرفر.' });
+        }
+
+        let settings = await GuildSettings.findOne({ guildId });
+
+        if (!settings) {
+            settings = await GuildSettings.create({ guildId });
+        }
+
+        res.set('Cache-Control', 'no-store');
+        return res.json(plainSettings(settings));
+    } catch (error) {
+        return res.status(500).json({ error: 'تعذّر تحميل الإعدادات.' });
+    }
+});
+
+app.post('/api/settings/:guildId', requireLogin, async (req, res) => {
+    try {
+        const { guildId } = req.params;
+
+        if (!validSnowflake(guildId)) {
+            return res.status(400).json({ error: 'معرّف السيرفر غير صحيح.' });
+        }
+
+        if (!(await isAuthorizedGuild(req, guildId))) {
+            return res.status(403).json({ error: 'غير مسموح لك بتعديل إعدادات هذا السيرفر.' });
+        }
+
+        const body = req.body;
+        const updates = {};
+
+        for (const key of Object.keys(body)) {
+            if (!ALLOWED_FIELDS.includes(key)) continue;
+
+            const value = body[key];
+
+            if (key === 'prefix') {
+                updates.prefix = String(value || '').trim();
+            } else if (['staffRoleId', 'ticketCategoryId', 'logChannelId'].includes(key)) {
+                updates[key] = String(value || '').trim();
+            } else if ([
+                'botName', 'botStatus', 'activityText',
+                'panelTitle', 'panelDescription', 'panelImage',
+                'ticketImage', 'botAvatar'
+            ].includes(key)) {
+                updates[key] = String(value || '').trim();
+            } else if (key === 'activityType') {
+                updates.activityType = Number(value) || 0;
+            } else if (key === 'renameCooldown') {
+                updates.renameCooldown = Number(value) || 10;
+            } else if (key === 'selectOptions') {
+                updates.selectOptions = Array.isArray(value) ? value : defaultOptions;
+            } else if (key === 'autoReplies') {
+                updates.autoReplies = Array.isArray(value) ? value : [];
+            } else if (key === 'rolePointsConfig') {
+                if (!Array.isArray(value)) {
+                    return res.status(400).json({ error: 'بيانات نقاط الرتب غير صحيحة.' });
+                }
+                const cleanConfigs = [];
+                for (const item of value) {
+                    if (!item || typeof item !== 'object') continue;
+                    const roleId = String(item.roleId || '').trim();
+                    const commands = item.commands && typeof item.commands === 'object' ? item.commands : {};
+                    
+                    if (validSnowflake(roleId)) {
+                        const cleanCmds = {};
+                        for (const cmdKey of ['claim', 'warn', 'timeout', 'close']) {
+                            cleanCmds[cmdKey] = Number(commands[cmdKey]) >= 0 ? Number(commands[cmdKey]) : 1;
+                        }
+                        cleanConfigs.push({ roleId, commands: cleanCmds });
+                    }
+                }
+                updates.rolePointsConfig = cleanConfigs;
+            } else if (key === 'commandPermissions' || key === 'commandAliases') {
+                updates[key] = value;
+            }
+        }
+
+        let settings = await GuildSettings.findOne({ guildId });
+
+        if (!settings) {
+            settings = new GuildSettings({ guildId });
+        }
+
+        for (const [key, value] of Object.entries(updates)) {
+            if (key === 'commandPermissions' || key === 'commandAliases') {
+                const targetMap = settings[key];
+                for (const [command, item] of Object.entries(value)) {
+                    targetMap.set(command, item);
+                }
+            } else {
+                settings.set(key, value);
+            }
+        }
+
+        await settings.save();
+
+        res.set('Cache-Control', 'no-store');
+        return res.json({
+            success: true,
+            settings: plainSettings(settings)
+        });
+    } catch (error) {
+        return res.status(500).json({ error: 'حدث خطأ أثناء حفظ الإعدادات.' });
+    }
+});
+
+app.get('/dashboard/:guildId', requireLogin, async (req, res) => {
+    try {
+        const guildId = req.params.guildId;
+
+        if (!validSnowflake(guildId)) {
+            return res.status(400).send('معرّف السيرفر غير صحيح.');
+        }
+
+        if (!(await isAuthorizedGuild(req, guildId))) {
+            return res.status(403).send('ليس لديك صلاحية إدارة هذا السيرفر أو البوت غير موجود فيه.');
+        }
+
+        let guildName = 'إعدادات السيرفر';
+
+        try {
+            const guildResponse = await axios.get(`${API}/guilds/${guildId}`, {
+                headers: { Authorization: `Bot ${BOT_TOKEN}` },
+                timeout: 10000
+            });
+            guildName = guildResponse.data.name || guildName;
+        } catch (error) {}
+
+        res.set('Cache-Control', 'no-store');
+
+        return res.send(`<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>إعدادات السيرفر - ${escapeHtml(BOT_NAME)}</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#101116;color:#f5f5fa;font-family:Arial,sans-serif}
+header{padding:18px 22px;background:#191b26;border-bottom:1px solid #303344;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.brand{font-weight:bold;font-size:19px}
+header a{color:#cdd0df;text-decoration:none;background:#292c3a;padding:10px 13px;border-radius:9px;font-size:13px}
+main{max-width:1100px;margin:25px auto;padding:0 16px 40px}
+h1{font-size:27px;margin:0 0 8px}
+.sub{color:#a6aabd;margin-bottom:22px;line-height:1.7}
+.layout{display:grid;grid-template-columns:220px minmax(0,1fr);gap:18px;align-items:start}
+nav{background:#1b1d28;border:1px solid #303344;border-radius:14px;padding:8px;position:sticky;top:15px}
+nav button{width:100%;text-align:right;border:0;background:transparent;color:#bfc3d4;padding:13px 12px;border-radius:9px;cursor:pointer;font-size:14px}
+nav button.active,nav button:hover{background:#30344a;color:#fff}
+section.panel{display:none;background:#1b1d28;border:1px solid #303344;border-radius:15px;padding:20px}
+section.panel.active{display:block}
+h2{font-size:20px;margin:0 0 18px}
+h3{font-size:15px;margin:22px 0 12px;color:#dfe1ed}
+.field{margin-bottom:15px}
+label{display:block;font-size:13px;color:#cdd0df;margin-bottom:7px}
+input,textarea,select{width:100%;padding:11px 12px;border:1px solid #3a3e52;border-radius:9px;background:#12141c;color:#fff;font:inherit;outline:none}
+input:focus,textarea:focus,select:focus{border-color:#737eff}
+textarea{min-height:90px;resize:vertical}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.help{font-size:12px;color:#999fb4;margin-top:6px;line-height:1.6}
+.savebar{display:flex;align-items:center;gap:12px;margin-top:20px;flex-wrap:wrap}
+.save{border:0;background:#5865f2;color:white;padding:12px 20px;border-radius:10px;font-weight:bold;cursor:pointer}
+.save:hover{background:#4752c4}
+.save:disabled{opacity:.6;cursor:wait}
+#status{font-size:13px;color:#bfc3d4;line-height:1.7}
+.command{border:1px solid #35394b;padding:13px;border-radius:11px;margin-bottom:12px}
+.command strong{display:block;margin-bottom:10px;font-size:14px}
+.role-list{display:flex;flex-wrap:wrap;gap:8px}
+.role-choice{display:flex;align-items:center;gap:7px;background:#12141c;border:1px solid #3a3e52;padding:8px 10px;border-radius:8px;font-size:12px;max-width:100%}
+.role-choice input{width:auto;margin:0}
+.role-choice span{overflow-wrap:anywhere}
+.option{padding:14px;border:1px solid #35394b;border-radius:11px;margin-bottom:12px}
+.empty{color:#a6aabd;font-size:13px;line-height:1.8}
+
+.alias-card{background:#12141c;border:1px solid #3a3e52;padding:15px;border-radius:10px;margin-bottom:12px}
+.alias-item{display:flex;align-items:center;gap:10px;margin-top:8px}
+.btn-sm{padding:6px 12px;border-radius:6px;border:0;cursor:pointer;font-size:12px;font-weight:bold}
+.btn-add{background:#57f287;color:#000}
+.btn-danger{background:#ed4245;color:#fff}
+.btn-toggle{background:#fee75c;color:#000}
+@media(max-width:750px){.layout{grid-template-columns:1fr}nav{position:static;display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.grid{grid-template-columns:1fr}section.panel{padding:15px}header{padding:14px}}
+</style>
+</head>
+<body>
+<header>
+    <div class="brand">${escapeHtml(BOT_NAME)} | لوحة التحكم</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <a href="/dashboard">السيرفرات</a>
+        <a href="/logout">تسجيل الخروج</a>
+    </div>
 </header>
 <main>
     <h1>${escapeHtml(guildName)}</h1>
-    <div class="sub">لوحة التحكم المركزية لإدارة البوت بدقة واحترافية.</div>
+    <div class="sub">عدّل إعدادات البوت ثم اضغط «حفظ الإعدادات» لتطبيق التغييرات.</div>
+
     <div class="layout">
         <nav id="tabs">
             <button class="active" data-tab="general">إعدادات البوت</button>
             <button data-tab="channels">القنوات والرتب</button>
-            <button data-tab="aliases">اختصارات الأوامر</button>
-            <button data-tab="rolepoints">نقاط الرتب بالأمر</button>
+            <button data-tab="panel">لوحة التذاكر</button>
+            <button data-tab="options">خيارات التذاكر</button>
             <button data-tab="autoreplies">الرد التلقائي</button>
+            <button data-tab="rolepoints">نقاط الرتب</button>
+            <button data-tab="aliases">البادئة والاختصارات</button>
+            <button data-tab="permissions">صلاحيات الأوامر</button>
+            <button data-tab="points">المهلة الزمانية</button>
         </nav>
+
         <div>
             <section class="panel active" id="general">
-                <h2>إعدادات البوت والمهلة</h2>
-                <div class="field"><label>البريفيكس (إذا تركته فارغاً، تعمل الأوامر مباشرة بدون رمز)</label><input id="prefix"></div>
-                <div class="field"><label>اسم البوت</label><input id="botName"></div>
-                <div class="field"><label>رابط صورة البوت</label><input id="botAvatar"></div>
-                <div class="field"><label>نص النشاط</label><input id="activityText"></div>
-                <div class="field"><label>مهلة إعادة تسمية التذكرة (بالدقائق)</label><input id="renameCooldown" type="number"></div>
+                <h2>إعدادات البوت</h2>
+                <div class="field"><label for="botName">اسم البوت</label><input id="botName" maxlength="100" placeholder="اسم البوت"></div>
+                <div class="field"><label for="botAvatar">رابط صورة البوت</label><input id="botAvatar" type="url" placeholder="https://..."></div>
+
+                <div class="grid">
+                    <div class="field">
+                        <label for="botStatus">حالة البوت</label>
+                        <select id="botStatus">
+                            <option value="online">متصل</option>
+                            <option value="idle">خامل</option>
+                            <option value="dnd">عدم الإزعاج</option>
+                            <option value="invisible">مخفي</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label for="activityType">نوع النشاط</label>
+                        <select id="activityType">
+                            <option value="0">يلعب</option>
+                            <option value="2">يستمع إلى</option>
+                            <option value="3">يشاهد</option>
+                            <option value="5">يتنافس في</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="field"><label for="activityText">نص النشاط</label><input id="activityText" maxlength="128" placeholder="مثال: الدعم الفني"></div>
             </section>
+
             <section class="panel" id="channels">
-                <h2>القنوات والرتب الأساسية</h2>
-                <div class="field"><label>رتبة الإدارة العامة</label><input id="staffRoleId"></div>
-                <div class="field"><label>كاتيجوري التذاكر</label><input id="ticketCategoryId"></div>
-                <div class="field"><label>قناة اللوق (السجلات)</label><input id="logChannelId"></div>
+                <h2>القنوات والرتب</h2>
+                <div class="field"><label for="staffRoleId">معرّف رتبة الإدارة العامة</label><input id="staffRoleId" placeholder="Role ID"></div>
+                <div class="field"><label for="ticketCategoryId">معرّف كاتيجوري التذاكر</label><input id="ticketCategoryId" placeholder="Category ID"></div>
+                <div class="field"><label for="logChannelId">معرّف قناة اللوق</label><input id="logChannelId" placeholder="Channel ID"></div>
             </section>
-            <section class="panel" id="aliases">
-                <h2>اختصارات الأوامر</h2>
-                <div id="aliasesContainer"></div>
+
+            <section class="panel" id="panel">
+                <h2>لوحة التذاكر</h2>
+                <div class="field"><label for="panelTitle">عنوان اللوحة</label><input id="panelTitle" maxlength="200" placeholder="الدعم الفني"></div>
+                <div class="field"><label for="panelDescription">وصف اللوحة</label><textarea id="panelDescription" maxlength="2000" placeholder="اكتب وصف لوحة الدعم الفني"></textarea></div>
+                <div class="field"><label for="panelImage">رابط صورة اللوحة</label><input id="panelImage" type="url" placeholder="https://..."></div>
+                <div class="field"><label for="ticketImage">رابط صورة التذكرة</label><input id="ticketImage" type="url" placeholder="https://..."></div>
             </section>
-            <section class="panel" id="rolepoints">
-                <h2>نقاط الرتب بالأمر</h2>
-                <p class="help">اختر الرتبة، ثم حدد عدد النقاط لكل أمر أدناها.</p>
-                <div id="rolePointsContainer"></div>
-                <button type="button" class="btn-sm btn-add" onclick="addRolePointConfig()">+ اضافة رتبه جديدة</button>
+
+            <section class="panel" id="options">
+                <h2>خيارات التذاكر</h2>
+                <div class="option">
+                    <h3>الخيار الأول: استفسار</h3>
+                    <div class="field"><label for="option0label">الاسم الظاهر</label><input id="option0label" maxlength="100"></div>
+                    <div class="field"><label for="option0emoji">الإيموجي</label><input id="option0emoji" maxlength="100"></div>
+                    <div class="field"><label for="option0description">الوصف</label><input id="option0description" maxlength="100" placeholder="استفسار عام"></div>
+                </div>
+                <div class="option">
+                    <h3>الخيار الثاني: شكوى</h3>
+                    <div class="field"><label for="option1label">الاسم الظاهر</label><input id="option1label" maxlength="100"></div>
+                    <div class="field"><label for="option1emoji">الإيموجي</label><input id="option1emoji" maxlength="100"></div>
+                    <div class="field"><label for="option1description">الوصف</label><input id="option1description" maxlength="100" placeholder="تقديم شكوى"></div>
+                </div>
+                <div class="option">
+                    <h3>الخيار الثالث: استلام هدايا</h3>
+                    <div class="field"><label for="option2label">الاسم الظاهر</label><input id="option2label" maxlength="100"></div>
+                    <div class="field"><label for="option2emoji">الإيموجي</label><input id="option2emoji" maxlength="100"></div>
+                    <div class="field"><label for="option2description">الوصف</label><input id="option2description" maxlength="100" placeholder="استلام هدايا"></div>
+                </div>
+                <div class="option">
+                    <h3>الخيار الرابع: شيء اخر ..</h3>
+                    <div class="field"><label for="option3label">الاسم الظاهر</label><input id="option3label" maxlength="100"></div>
+                    <div class="field"><label for="option3emoji">الإيموجي</label><input id="option3emoji" maxlength="100"></div>
+                    <div class="field"><label for="option3description">الوصف</label><input id="option3description" maxlength="100" placeholder="شيء اخر"></div>
+                </div>
             </section>
+
             <section class="panel" id="autoreplies">
                 <h2>الرد التلقائي</h2>
                 <div id="autoReplyContainer"></div>
-                <button type="button" class="btn-sm btn-add" onclick="addAutoReply()">+ ضيف رد جديد</button>
+                <button type="button" class="btn-sm btn-add" style="margin-top:10px;padding:10px 16px;font-size:14px;" onclick="addAutoReply()">+ ضيف رد جديد</button>
             </section>
+
+            <section class="panel" id="rolepoints">
+                <h2>نقاط الرتب المخصصة</h2>
+                <p class="help">تستطيع تخصيص النقاط المكتسبة لكل رتبة إدارية على كل أمر بشكل منفصل.</p>
+                <div id="rolePointsContainer"></div>
+                <button type="button" class="btn-sm btn-add" style="margin-top:10px;padding:10px 16px;font-size:14px;" onclick="addRolePointConfig()">+ إضافة رتبة نقاط جديد</button>
+            </section>
+
+            <section class="panel" id="aliases">
+                <h2>البادئة والاختصارات</h2>
+                <div class="field">
+                    <label for="prefix">بادئة الأوامر (Prefix)</label>
+                    <input id="prefix" maxlength="5" placeholder="مثال: - أو اتركها فارغة ليعمل بدون Prefix">
+                </div>
+                <div id="aliasContainer"></div>
+            </section>
+
+            <section class="panel" id="permissions">
+                <h2>صلاحيات الأوامر</h2>
+                <div id="permissionFields"><div class="empty">جارٍ تحميل الرتب...</div></div>
+            </section>
+
+            <section class="panel" id="points">
+                <h2>المهلة الزمانية</h2>
+                <div class="field"><label for="renameCooldown">مهلة إعادة تسمية التذكرة بالدقائق</label><input id="renameCooldown" type="number" min="0" max="1440"></div>
+            </section>
+
             <div class="savebar">
                 <button class="save" id="saveButton">حفظ الإعدادات</button>
-                <span id="status"></span>
+                <span id="status" role="status"></span>
             </div>
         </div>
     </div>
 </main>
+
 <script>
 (function () {
     const guildId = ${JSON.stringify(guildId)};
-    let roles = [], commandAliasesData = {}, rolePointsData = [], autoRepliesData = [];
-    const commandsList = [
-        { id: 'claim', name: 'استلام (claim)' },
-        { id: 'timeout', name: 'تايم أوت (timeout)' },
-        { id: 'warn', name: 'تحذير (warn)' },
-        { id: 'unwarn', name: 'فك تحذير (unwarn)' },
-        { id: 'warns', name: 'عرض التحذيرات (warns)' },
-        { id: 'close', name: 'إغلاق التذكرة (close)' }
-    ];
+    const commandNames = ${JSON.stringify(COMMAND_NAMES)};
+    const pointCommands = ${JSON.stringify(POINT_COMMANDS)};
 
-    document.querySelectorAll('#tabs button').forEach(b => {
-        b.onclick = () => {
-            document.querySelectorAll('#tabs button').forEach(x => x.classList.remove('active'));
-            document.querySelectorAll('section.panel').forEach(x => x.classList.remove('active'));
-            b.classList.add('active');
-            document.getElementById(b.dataset.tab).classList.add('active');
-        };
+    let currentSettings = {};
+    let roles = [];
+    let aliasesData = {};
+    let autoRepliesData = [];
+    let rolePointsData = [];
+
+    document.querySelectorAll('#tabs button').forEach(function (button) {
+        button.addEventListener('click', function () {
+            document.querySelectorAll('#tabs button').forEach(function (item) {
+                item.classList.remove('active');
+            });
+
+            document.querySelectorAll('section.panel').forEach(function (panel) {
+                panel.classList.remove('active');
+            });
+
+            button.classList.add('active');
+            document.getElementById(button.dataset.tab).classList.add('active');
+        });
     });
 
-    function escapeHtml(str) {
-        return String(str || '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-    }
-
-    // دالة لحفظ المدخلات الحالية قبل أي إعادة رسم لمنع فقدان البيانات
-    function syncRolePointsFromDOM() {
-        const cards = document.querySelectorAll('#rolePointsContainer .alias-card');
-        cards.forEach((card, gIdx) => {
-            if (!rolePointsData[gIdx]) return;
-            const selectEl = card.querySelector('select');
-            if (selectEl) {
-                rolePointsData[gIdx].roleId = selectEl.value;
-            }
-            const inputs = card.querySelectorAll('input[type="number"]');
-            inputs.forEach(input => {
-                const cmdId = input.dataset.cmd;
-                if (cmdId) {
-                    rolePointsData[gIdx].commands[cmdId] = Number(input.value) || 0;
-                }
-            });
-        });
-    }
-
-    function renderAliases() {
-        const c = document.getElementById('aliasesContainer');
-        c.innerHTML = '';
-        for (const [cmd, list] of Object.entries(commandAliasesData)) {
-            const d = document.createElement('div');
-            d.className = 'alias-card';
-            let aliasesHtml = '';
-            if (Array.isArray(list)) {
-                list.forEach((item, idx) => {
-                    aliasesHtml += \`<div style="display:flex;gap:10px;margin-bottom:10px;align-items:center">
-                        <input value="\${escapeHtml(item.alias)}" oninput="commandAliasesData['\${cmd}'][$\{{idx}}].alias=this.value" style="flex:1">
-                        <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" \${item.active ? 'checked' : ''} onchange="commandAliasesData['\${cmd}'][$\{{idx}}].active=this.checked"> تفعيل</label>
-                    </div>\`;
-                });
-            }
-            d.innerHTML = \`<strong>الأمر الأساسي: \${cmd}</strong><div style="margin-top:10px">\${aliasesHtml}</div>\`;
-            c.appendChild(d);
+    function setValue(id, value) {
+        const element = document.getElementById(id);
+        if (element && value !== undefined && value !== null) {
+            element.value = value;
         }
     }
 
-    window.removeRolePointGroup = function(idx) {
-        syncRolePointsFromDOM();
-        rolePointsData.splice(idx, 1);
-        renderRolePoints();
+    function getValue(id) {
+        const element = document.getElementById(id);
+        return element ? element.value : '';
     }
 
-    function renderRolePoints() {
-        syncRolePointsFromDOM();
-        const c = document.getElementById('rolePointsContainer');
-        c.innerHTML = '';
-        rolePointsData.forEach((group, gIdx) => {
-            let rOpts = '<option value="">-- اختر الرتبة --</option>';
-            roles.forEach(r => { rOpts += '<option value="' + r.id + '" ' + (group.roleId === r.id ? 'selected' : '') + '>' + escapeHtml(r.name) + '</option>'; });
-
-            let cmdsHtml = '';
-            commandsList.forEach(cmd => {
-                let pts = (group.commands && group.commands[cmd.id] !== undefined) ? group.commands[cmd.id] : 1;
-                cmdsHtml += \`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;background:#141620;padding:8px 12px;border-radius:8px">
-                    <span style="font-size:13px;color:#cbd5e1">\${cmd.name}</span>
-                    <input type="number" data-cmd="\${cmd.id}" value="\${pts}" style="width:90px;padding:6px 10px" oninput="rolePointsData[\${gIdx}].commands['\${cmd.id}']=Number(this.value)">
-                </div>\`;
-            });
-
-            const d = document.createElement('div');
-            d.className = 'alias-card';
-            d.innerHTML = \`<div class="field"><label>الرتبة</label><select onchange="rolePointsData[\${gIdx}].roleId=this.value">\${rOpts}</select></div>
-                <label style="margin:12px 0 8px;display:block;color:#94a3b8;font-weight:bold">نقاط الأوامر لهذه الرتبة:</label>
-                \${cmdsHtml}
-                <button type="button" class="btn-sm btn-danger" style="margin-top:10px" onclick="window.removeRolePointGroup(\${gIdx})">حذف هذه الرتبة بالكامل</button>\`;
-            c.appendChild(d);
+    function escapeHtml(str) {
+        return String(str || '').replace(/[&<>"']/g, function(m) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m];
         });
     }
 
-    window.addRolePointConfig = () => {
+    function syncRolePointsFromDOM() {
+        document.querySelectorAll('#rolePointsContainer .alias-card').forEach((card, idx) => {
+            if (!rolePointsData[idx]) return;
+            const select = card.querySelector('.role-select');
+            if (select) rolePointsData[idx].roleId = select.value;
+
+            if (!rolePointsData[idx].commands) rolePointsData[idx].commands = {};
+            card.querySelectorAll('.cmd-point-input').forEach(input => {
+                const cmdName = input.dataset.cmd;
+                rolePointsData[idx].commands[cmdName] = Number(input.value) || 0;
+            });
+        });
+    }
+
+    function renderRolePoints() {
+        const container = document.getElementById('rolePointsContainer');
+        container.innerHTML = '';
+
+        if (!rolePointsData.length) {
+            container.innerHTML = '<div class="empty" style="margin-bottom:12px;">لا توجد رتب مخصصة بنقاط حالياً.</div>';
+            return;
+        }
+
+        rolePointsData.forEach(function (item, index) {
+            const card = document.createElement('div');
+            card.className = 'alias-card';
+
+            let roleOptionsHtml = '<option value="">-- اختر الرتبة --</option>';
+            roles.forEach(function (role) {
+                const selected = item.roleId === role.id ? 'selected' : '';
+                roleOptionsHtml += '<option value="' + role.id + '" ' + selected + '>' + escapeHtml(role.name) + '</option>';
+            });
+
+            const cmds = item.commands || {};
+            let cmdsHtml = '';
+            Object.keys(pointCommands).forEach(cmdKey => {
+                const val = cmds[cmdKey] !== undefined ? cmds[cmdKey] : 1;
+                cmdsHtml += \`
+                    <div style="margin-top:8px;">
+                        <label style="font-size:12px;color:#a6aabd;">نقاط أمر: \${pointCommands[cmdKey]}</label>
+                        <input type="number" class="cmd-point-input" data-cmd="\${cmdKey}" min="0" max="1000" value="\${val}">
+                    </div>
+                \`;
+            });
+
+            card.innerHTML = \`
+                <div class="field">
+                    <label>الرتبة الإدارية</label>
+                    <select class="role-select">\${roleOptionsHtml}</select>
+                </div>
+                <div class="field">
+                    <label><strong>توزيع النقاط للأوامر:</strong></label>
+                    \${cmdsHtml}
+                </div>
+                <button type="button" class="btn-sm btn-danger" onclick="deleteRolePoint(\${index})">حذف هذه الرتبة</button>
+            \`;
+
+            container.appendChild(card);
+        });
+    }
+
+    window.addRolePointConfig = function() {
         syncRolePointsFromDOM();
-        let defaultCmds = {};
-        commandsList.forEach(cmd => { defaultCmds[cmd.id] = 1; });
-        rolePointsData.push({ roleId: '', commands: defaultCmds });
+        rolePointsData.push({ roleId: '', commands: { claim: 1, warn: 1, timeout: 1, close: 1 } });
+        renderRolePoints();
+    };
+
+    window.deleteRolePoint = function(idx) {
+        syncRolePointsFromDOM();
+        rolePointsData.splice(idx, 1);
         renderRolePoints();
     };
 
     function renderAutoReplies() {
-        const c = document.getElementById('autoReplyContainer');
-        c.innerHTML = '';
-        autoRepliesData.forEach((item, idx) => {
-            let opts = '<option value="all" ' + (item.roleId === 'all' ? 'selected' : '') + '>الجميع</option>';
-            roles.forEach(r => { opts += '<option value="' + r.id + '" ' + (item.roleId === r.id ? 'selected' : '') + '>' + escapeHtml(r.name) + '</option>'; });
-            const d = document.createElement('div');
-            d.className = 'alias-card';
-            d.innerHTML = \`<div class="field"><label>الكلمة المفتاحية</label><input value="\${escapeHtml(item.trigger)}" oninput="autoRepliesData[\${idx}].trigger=this.value"></div>
-                <div class="field"><label>الرد</label><textarea oninput="autoRepliesData[\${idx}].reply=this.value">\${escapeHtml(item.reply)}</textarea></div>
-                <div class="field"><label>الرتبة المخصصة</label><select onchange="autoRepliesData[\${idx}].roleId=this.value">\${opts}</select></div>
-                <button type="button" class="btn-sm btn-danger" onclick="autoRepliesData.splice(\${idx},1);renderAutoReplies()">حذف</button>\`;
-            c.appendChild(d);
-        });
-    }
-    window.addAutoReply = () => { autoRepliesData.push({ trigger: '', reply: '', roleId: 'all' }); renderAutoReplies(); };
+        const container = document.getElementById('autoReplyContainer');
+        container.innerHTML = '';
 
-    async function load() {
-        const [sRes, rRes] = await Promise.all([
-            fetch('/api/settings/' + guildId).then(r => r.json()),
-            fetch('/api/roles/' + guildId).then(r => r.json()).catch(() => [])
-        ]);
-        roles = Array.isArray(rRes) ? rRes : [];
-        commandAliasesData = sRes.commandAliases || ${JSON.stringify(defaultAliases)};
-        
-        if (Array.isArray(sRes.rolePointsConfig)) {
-            if (sRes.rolePointsConfig.length > 0 && sRes.rolePointsConfig[0].commands === undefined) {
-                let grouped = {};
-                sRes.rolePointsConfig.forEach(item => {
-                    if (!grouped[item.roleId]) {
-                        grouped[item.roleId] = {};
-                        commandsList.forEach(cmd => { grouped[item.roleId][cmd.id] = 1; });
-                    }
-                    grouped[item.roleId][item.command] = item.points;
-                });
-                rolePointsData = Object.keys(grouped).map(rId => ({ roleId: rId, commands: grouped[rId] }));
-            } else {
-                rolePointsData = sRes.rolePointsConfig;
-            }
-        } else {
-            rolePointsData = [];
+        if (!autoRepliesData.length) {
+            container.innerHTML = '<div class="empty" style="margin-bottom:12px;">لا توجد ردود تلقائية مضافة حالياً.</div>';
+            return;
         }
 
-        autoRepliesData = sRes.autoReplies || [];
+        autoRepliesData.forEach(function (item, index) {
+            const card = document.createElement('div');
+            card.className = 'alias-card';
 
-        ['prefix','botName','botAvatar','activityText','staffRoleId','ticketCategoryId','logChannelId','renameCooldown'].forEach(k => {
-            if (sRes[k] !== undefined) {
-                const el = document.getElementById(k);
-                if (el) el.value = sRes[k];
-            }
+            let roleOptionsHtml = '<option value="all" ' + (item.roleId === 'all' ? 'selected' : '') + '>الجميع (بدون رتبة محددة)</option>';
+            roles.forEach(function (role) {
+                const selected = item.roleId === role.id ? 'selected' : '';
+                roleOptionsHtml += '<option value="' + role.id + '" ' + selected + '>' + escapeHtml(role.name) + '</option>';
+            });
+
+            card.innerHTML = \`
+                <div class="field">
+                    <label>الكلمة المستهدفة</label>
+                    <input type="text" value="\${escapeHtml(item.trigger || '')}" onchange="updateAutoReply(\${index}, 'trigger', this.value)">
+                </div>
+                <div class="field">
+                    <label>الرد التلقائي</label>
+                    <textarea onchange="updateAutoReply(\${index}, 'reply', this.value)">\${escapeHtml(item.reply || '')}</textarea>
+                </div>
+                <div class="field">
+                    <label>الرتبة المطلوبة</label>
+                    <select onchange="updateAutoReply(\${index}, 'roleId', this.value)">\${roleOptionsHtml}</select>
+                </div>
+                <button type="button" class="btn-sm btn-danger" onclick="deleteAutoReply(\${index})">حذف الرد</button>
+            \`;
+            container.appendChild(card);
         });
-        renderAliases();
-        renderRolePoints();
-        renderAutoReplies();
     }
 
-    document.getElementById('saveButton').onclick = async function() {
-        syncRolePointsFromDOM();
-        this.disabled = true;
-        document.getElementById('status').textContent = 'جارٍ الحفظ...';
-        const payload = {
-            prefix: document.getElementById('prefix').value,
-            botName: document.getElementById('botName').value,
-            botAvatar: document.getElementById('botAvatar').value,
-            activityText: document.getElementById('activityText').value,
-            staffRoleId: document.getElementById('staffRoleId').value,
-            ticketCategoryId: document.getElementById('ticketCategoryId').value,
-            logChannelId: document.getElementById('logChannelId').value,
-            renameCooldown: Number(document.getElementById('renameCooldown').value),
-            commandAliases: commandAliasesData,
-            rolePointsConfig: rolePointsData,
-            autoReplies: autoRepliesData
-        };
-        const res = await fetch('/api/settings/' + guildId, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(payload)
-        });
-        this.disabled = false;
-        document.getElementById('status').textContent = res.ok ? 'تم الحفظ بنجاح.' : 'فشل الحفظ.';
+    window.addAutoReply = function() {
+        autoRepliesData.push({ trigger: '', reply: '', roleId: 'all' });
+        renderAutoReplies();
     };
 
-    load();
+    window.updateAutoReply = function(idx, field, val) {
+        if (autoRepliesData[idx]) autoRepliesData[idx][field] = val.trim();
+    };
+
+    window.deleteAutoReply = function(idx) {
+        autoRepliesData.splice(idx, 1);
+        renderAutoReplies();
+    };
+
+    function renderAliases() {
+        const container = document.getElementById('aliasContainer');
+        container.innerHTML = '';
+
+        Object.keys(commandNames).forEach(function (cmd) {
+            const card = document.createElement('div');
+            card.className = 'alias-card';
+            let list = Array.isArray(aliasesData[cmd]) ? aliasesData[cmd] : [];
+            card.innerHTML = '<strong>' + commandNames[cmd] + '</strong>';
+
+            const listDiv = document.createElement('div');
+            list.forEach(function (item, index) {
+                const row = document.createElement('div');
+                row.className = 'alias-item';
+                row.innerHTML = \`
+                    <input type="text" value="\${item.alias}" placeholder="اكتب الاختصار" onchange="updateAlias('\${cmd}', \${index}, this.value)">
+                    <button type="button" class="btn-sm btn-toggle" onclick="toggleAlias('\${cmd}', \${index})">\${item.active ? 'مفعل' : 'معطل'}</button>
+                    <button type="button" class="btn-sm btn-danger" onclick="deleteAlias('\${cmd}', \${index})">حذف</button>
+                \`;
+                listDiv.appendChild(row);
+            });
+
+            const addBtn = document.createElement('button');
+            addBtn.type = 'button';
+            addBtn.className = 'btn-sm btn-add';
+            addBtn.style.marginTop = '10px';
+            addBtn.textContent = '+ إضافة اختصار جديد';
+            addBtn.onclick = function() { addAlias(cmd); };
+
+            card.appendChild(listDiv);
+            card.appendChild(addBtn);
+            container.appendChild(card);
+        });
+    }
+
+    window.updateAlias = function(cmd, idx, val) {
+        if (aliasesData[cmd] && aliasesData[cmd][idx]) aliasesData[cmd][idx].alias = val.trim();
+    };
+
+    window.toggleAlias = function(cmd, idx) {
+        if (aliasesData[cmd] && aliasesData[cmd][idx]) {
+            aliasesData[cmd][idx].active = !aliasesData[cmd][idx].active;
+            renderAliases();
+        }
+    };
+
+    window.deleteAlias = function(cmd, idx) {
+        if (aliasesData[cmd]) {
+            aliasesData[cmd].splice(idx, 1);
+            renderAliases();
+        }
+    };
+
+    window.addAlias = function(cmd) {
+        if (!aliasesData[cmd]) aliasesData[cmd] = [];
+        aliasesData[cmd].push({ alias: '', active: true });
+        renderAliases();
+    };
+
+    function makePermissionFields(settings) {
+        const container = document.getElementById('permissionFields');
+        container.innerHTML = '';
+
+        if (!roles.length) {
+            container.innerHTML = '<div class="empty">لم يتم العثور على رتب.</div>';
+            return;
+        }
+
+        Object.keys(commandNames).forEach(function (command) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'command';
+
+            const title = document.createElement('strong');
+            title.textContent = commandNames[command];
+            wrapper.appendChild(title);
+
+            const list = document.createElement('div');
+            list.className = 'role-list';
+
+            const selected = settings.commandPermissions && Array.isArray(settings.commandPermissions[command])
+                ? settings.commandPermissions[command]
+                : [];
+
+            roles.forEach(function (role) {
+                const label = document.createElement('label');
+                label.className = 'role-choice';
+
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.dataset.command = command;
+                checkbox.value = role.id;
+                checkbox.checked = selected.includes(role.id);
+
+                const name = document.createElement('span');
+                name.textContent = role.name;
+
+                label.appendChild(checkbox);
+                label.appendChild(name);
+                list.appendChild(label);
+            });
+
+            wrapper.appendChild(list);
+            container.appendChild(wrapper);
+        });
+    }
+
+    function fillForm(settings) {
+        const textFields = [
+            'botName', 'botAvatar', 'botStatus', 'activityType', 'activityText',
+            'staffRoleId', 'ticketCategoryId', 'logChannelId', 'panelTitle',
+            'panelDescription', 'panelImage', 'ticketImage', 'prefix', 'renameCooldown'
+        ];
+
+        textFields.forEach(function (key) {
+            setValue(key, settings[key]);
+        });
+
+        const options = Array.isArray(settings.selectOptions) ? settings.selectOptions : [];
+        const defaultLabels = ['استفسار', 'شكوى', 'استلام هدايا', 'شيء اخر ..'];
+        const defaultEmojis = ['1493382115318960169', '1545031336274960384', '1545029143777902702', '1450547743025008650'];
+
+        for (let i = 0; i < 4; i++) {
+            const option = options[i] || {};
+            setValue('option' + i + 'label', option.label || defaultLabels[i]);
+            setValue('option' + i + 'emoji', option.emoji || defaultEmojis[i]);
+            setValue('option' + i + 'description', option.description || '');
+        }
+
+        autoRepliesData = Array.isArray(settings.autoReplies) ? settings.autoReplies : [];
+        rolePointsData = Array.isArray(settings.rolePointsConfig) ? settings.rolePointsConfig : [];
+
+        aliasesData = settings.commandAliases || {};
+        Object.keys(commandNames).forEach(function(cmd) {
+            if (!aliasesData[cmd]) aliasesData[cmd] = [];
+        });
+
+        renderAutoReplies();
+        renderRolePoints();
+        renderAliases();
+        makePermissionFields(settings);
+    }
+
+    async function loadData() {
+        const status = document.getElementById('status');
+        status.textContent = 'جارٍ التحميل...';
+
+        try {
+            const settingsRes = await fetch('/api/settings/' + encodeURIComponent(guildId));
+            const settingsData = await settingsRes.json();
+            currentSettings = settingsData;
+
+            const rolesRes = await fetch('/api/roles/' + encodeURIComponent(guildId));
+            roles = await rolesRes.json();
+
+            fillForm(currentSettings);
+            status.textContent = '';
+        } catch (error) {
+            status.textContent = 'حدث خطأ أثناء التحميل.';
+        }
+    }
+
+    function collectPermissions() {
+        const permissions = {};
+        Object.keys(commandNames).forEach(cmd => permissions[cmd] = []);
+        document.querySelectorAll('#permissionFields input[type="checkbox"]:checked').forEach(cb => {
+            permissions[cb.dataset.command].push(cb.value);
+        });
+        return permissions;
+    }
+
+    function collectOptions() {
+        return [
+            { label: getValue('option0label').trim(), value: 'inquiry', emoji: getValue('option0emoji').trim(), description: getValue('option0description').trim() },
+            { label: getValue('option1label').trim(), value: 'complaint', emoji: getValue('option1emoji').trim(), description: getValue('option1description').trim() },
+            { label: getValue('option2label').trim(), value: 'gifts', emoji: getValue('option2emoji').trim(), description: getValue('option2description').trim() },
+            { label: getValue('option3label').trim(), value: 'other', emoji: getValue('option3emoji').trim(), description: getValue('option3description').trim() }
+        ];
+    }
+
+    document.getElementById('saveButton').addEventListener('click', async function () {
+        syncRolePointsFromDOM();
+
+        const button = this;
+        const status = document.getElementById('status');
+        button.disabled = true;
+        status.textContent = 'جارٍ الحفظ...';
+
+        const payload = {
+            botName: getValue('botName').trim(),
+            botAvatar: getValue('botAvatar').trim(),
+            botStatus: getValue('botStatus'),
+            activityType: Number(getValue('activityType')),
+            activityText: getValue('activityText').trim(),
+            staffRoleId: getValue('staffRoleId').trim(),
+            ticketCategoryId: getValue('ticketCategoryId').trim(),
+            logChannelId: getValue('logChannelId').trim(),
+            panelTitle: getValue('panelTitle').trim(),
+            panelDescription: getValue('panelDescription').trim(),
+            panelImage: getValue('panelImage').trim(),
+            ticketImage: getValue('ticketImage').trim(),
+            selectOptions: collectOptions(),
+            autoReplies: autoRepliesData,
+            rolePointsConfig: rolePointsData,
+            prefix: getValue('prefix'),
+            commandAliases: aliasesData,
+            commandPermissions: collectPermissions(),
+            renameCooldown: Number(getValue('renameCooldown'))
+        };
+
+        try {
+            const response = await fetch('/api/settings/' + encodeURIComponent(guildId), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error);
+
+            currentSettings = result.settings;
+            status.textContent = 'تم حفظ الإعدادات بنجاح.';
+        } catch (error) {
+            status.textContent = error.message || 'حدث خطأ أثناء الحفظ.';
+        } finally {
+            button.disabled = false;
+        }
+    });
+
+    loadData();
 })();
 </script>
 </body>
 </html>`);
-    } catch {
-        return res.status(500).send('خطأ.');
+    } catch (error) {
+        return res.status(500).send('حدث خطأ أثناء فتح إعدادات السيرفر.');
     }
 });
 
-app.use((req, res) => res.status(404).send('غير موجود.'));
-if (process.env.NODE_ENV !== 'production') app.listen(PORT);
+app.use((req, res) => {
+    res.status(404).send('الصفحة غير موجودة.');
+});
+
+if (process.env.NODE_ENV !== 'production') {
+    app.listen(PORT, () => {
+        console.log(`Dashboard running on port ${PORT}`);
+    });
+}
+
 module.exports = app;

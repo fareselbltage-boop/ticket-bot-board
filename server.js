@@ -50,6 +50,7 @@ const defaultAliases = {
     rename: [{ alias: 'rename', active: true }],
     claim: [{ alias: 'استلام', active: true }],
     timeout: [{ alias: 'تايم', active: true }],
+    untimeout: [{ alias: 'فك-تايم', active: true }],
     warn: [{ alias: 'تحذير', active: true }],
     close: [{ alias: 'اغلاق', active: true }],
     delete: [{ alias: 'حذف', active: true }],
@@ -120,7 +121,7 @@ app.use(session({
 }));
 
 const COMMANDS = [
-    'add', 'come', 'rename', 'claim', 'timeout',
+    'add', 'come', 'rename', 'claim', 'timeout', 'untimeout',
     'warn', 'close', 'delete', 'addpoints', 'removepoints', 'resettop'
 ];
 
@@ -129,7 +130,8 @@ const COMMAND_NAMES = {
     come: 'استدعاء إداري (come)',
     rename: 'إعادة تسمية (rename)',
     claim: 'استلام التذكرة (claim)',
-    timeout: 'تايم عضو (timeout)',
+    timeout: 'تايم أوت عضو (timeout)',
+    untimeout: 'إلغاء التايم أوت (untimeout)',
     warn: 'تحذير عضو (warn)',
     close: 'قفل التذكرة (close)',
     delete: 'حذف التذكرة (delete)',

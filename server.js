@@ -81,6 +81,7 @@ const GuildSettings = mongoose.models.GuildSettings || mongoose.model(
         timeoutPoints: { type: Number, default: 1 },
         renameCooldown: { type: Number, default: 10 },
         selectOptions: { type: Array, default: defaultOptions },
+        autoReplies: { type: Array, default: [] },
         commandPermissions: { type: Map, of: [String], default: {} },
         commandAliases: {
             type: Map,
@@ -145,7 +146,7 @@ const ALLOWED_FIELDS = [
     'panelImage', 'ticketImage', 'panelTitle', 'panelDescription',
     'botName', 'botAvatar', 'botStatus', 'activityType', 'activityText',
     'claimPoints', 'warnPoints', 'timeoutPoints', 'renameCooldown',
-    'selectOptions', 'commandPermissions', 'commandAliases'
+    'selectOptions', 'autoReplies', 'commandPermissions', 'commandAliases'
 ];
 
 function validSnowflake(value) {
@@ -716,6 +717,23 @@ app.post('/api/settings/:guildId', requireLogin, async (req, res) => {
                 }
 
                 updates.selectOptions = cleanOptions;
+            } else if (key === 'autoReplies') {
+                if (!Array.isArray(value)) {
+                    return res.status(400).json({ error: 'بيانات الردود التلقائية غير صحيحة.' });
+                }
+
+                const cleanReplies = [];
+                for (const item of value) {
+                    if (!item || typeof item !== 'object') continue;
+                    const trigger = String(item.trigger || '').trim();
+                    const reply = String(item.reply || '').trim();
+                    const roleId = String(item.roleId || 'all').trim();
+
+                    if (trigger && reply) {
+                        cleanReplies.push({ trigger, reply, roleId });
+                    }
+                }
+                updates.autoReplies = cleanReplies;
             } else if (key === 'commandPermissions' || key === 'commandAliases') {
                 if (!value || typeof value !== 'object' || Array.isArray(value)) {
                     return res.status(400).json({ error: `بيانات ${key} غير صحيحة.` });
@@ -887,6 +905,7 @@ textarea{min-height:90px;resize:vertical}
             <button data-tab="channels">القنوات والرتب</button>
             <button data-tab="panel">لوحة التذاكر</button>
             <button data-tab="options">خيارات التذاكر</button>
+            <button data-tab="autoreplies">الرد التلقائي</button>
             <button data-tab="aliases">البادئة والاختصارات</button>
             <button data-tab="permissions">صلاحيات الأوامر</button>
             <button data-tab="points">النقاط والمهلة</button>
@@ -968,6 +987,13 @@ textarea{min-height:90px;resize:vertical}
                 </div>
             </section>
 
+            <section class="panel" id="autoreplies">
+                <h2>الرد التلقائي</h2>
+                <p class="help">أضف ردود تلقائية حسب الكلمة المستهدفة، واختر ما إذا كان الرد يعمل للجميع أو لرتبة محددة.</p>
+                <div id="autoReplyContainer"></div>
+                <button type="button" class="btn-sm btn-add" style="margin-top:10px;padding:10px 16px;font-size:14px;" onclick="addAutoReply()">+ ضيف رد جديد</button>
+            </section>
+
             <section class="panel" id="aliases">
                 <h2>البادئة والاختصارات</h2>
                 <div class="field">
@@ -1011,6 +1037,7 @@ textarea{min-height:90px;resize:vertical}
     let currentSettings = {};
     let roles = [];
     let aliasesData = {};
+    let autoRepliesData = [];
 
     document.querySelectorAll('#tabs button').forEach(function (button) {
         button.addEventListener('click', function () {
@@ -1038,6 +1065,68 @@ textarea{min-height:90px;resize:vertical}
     function getValue(id) {
         const element = document.getElementById(id);
         return element ? element.value : '';
+    }
+
+    function renderAutoReplies() {
+        const container = document.getElementById('autoReplyContainer');
+        container.innerHTML = '';
+
+        if (!autoRepliesData.length) {
+            container.innerHTML = '<div class="empty" style="margin-bottom:12px;">لا توجد ردود تلقائية مضافة حالياً.</div>';
+            return;
+        }
+
+        autoRepliesData.forEach(function (item, index) {
+            const card = document.createElement('div');
+            card.className = 'alias-card';
+
+            let roleOptionsHtml = '<option value="all" ' + (item.roleId === 'all' ? 'selected' : '') + '>الجميع (بدون رتبة محددة)</option>';
+            roles.forEach(function (role) {
+                const selected = item.roleId === role.id ? 'selected' : '';
+                roleOptionsHtml += '<option value="' + role.id + '" ' + selected + '>' + escapeHtml(role.name) + '</option>';
+            });
+
+            card.innerHTML = \`
+                <div class="field">
+                    <label>الكلمة أو الجملة المستهدفة (Trigger)</label>
+                    <input type="text" value="\${escapeHtml(item.trigger || '')}" placeholder="مثال: السلام عليكم" onchange="updateAutoReply(\${index}, 'trigger', this.value)">
+                </div>
+                <div class="field">
+                    <label>الرد الذي سيقوله البوت</label>
+                    <textarea placeholder="اكتب رد البوت هنا..." onchange="updateAutoReply(\${index}, 'reply', this.value)">\${escapeHtml(item.reply || '')}</textarea>
+                </div>
+                <div class="field">
+                    <label>الرتبة المطلوبة للرد عليها أو الجميع</label>
+                    <select onchange="updateAutoReply(\${index}, 'roleId', this.value)">
+                        \${roleOptionsHtml}
+                    </select>
+                </div>
+                <button type="button" class="btn-sm btn-danger" onclick="deleteAutoReply(\${index})">حذف الرد</button>
+            \`;
+            container.appendChild(card);
+        });
+    }
+
+    window.addAutoReply = function() {
+        autoRepliesData.push({ trigger: '', reply: '', roleId: 'all' });
+        renderAutoReplies();
+    };
+
+    window.updateAutoReply = function(idx, field, val) {
+        if (autoRepliesData[idx]) {
+            autoRepliesData[idx][field] = val.trim();
+        }
+    };
+
+    window.deleteAutoReply = function(idx) {
+        autoRepliesData.splice(idx, 1);
+        renderAutoReplies();
+    };
+
+    function escapeHtml(str) {
+        return String(str || '').replace(/[&<>"']/g, function(m) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m];
+        });
     }
 
     function renderAliases() {
@@ -1176,6 +1265,8 @@ textarea{min-height:90px;resize:vertical}
             setValue('option' + i + 'description', option.description || '');
         }
 
+        autoRepliesData = Array.isArray(settings.autoReplies) ? settings.autoReplies : [];
+
         aliasesData = settings.commandAliases || {};
         Object.keys(commandNames).forEach(function(cmd) {
             if (!aliasesData[cmd]) {
@@ -1185,6 +1276,7 @@ textarea{min-height:90px;resize:vertical}
             }
         });
 
+        renderAutoReplies();
         renderAliases();
         makePermissionFields(settings);
     }
@@ -1291,6 +1383,7 @@ textarea{min-height:90px;resize:vertical}
             panelImage: getValue('panelImage').trim(),
             ticketImage: getValue('ticketImage').trim(),
             selectOptions: collectOptions(),
+            autoReplies: autoRepliesData,
             prefix: getValue('prefix'),
             commandAliases: aliasesData,
             commandPermissions: collectPermissions(),

@@ -38,9 +38,10 @@ if (!MONGO_URI) {
 }
 
 const defaultOptions = [
-    { label: 'استفسار', value: 'inquiry', emoji: '❓', description: 'للاستفسارات العامة والأسئلة' },
-    { label: 'شكوى', value: 'complaint', emoji: '⚠️', description: 'تقديم شكوى إدارية' },
-    { label: 'مشكلة تقنية', value: 'technical', emoji: '🛠', description: 'المشاكل الفنية والتقنية' }
+    { label: 'استفسار', value: 'inquiry', emoji: '1493382115318960169', description: 'للاستفسارات العامة والأسئلة' },
+    { label: 'شكوى', value: 'complaint', emoji: '1545031336274960384', description: 'تقديم شكوى إدارية' },
+    { label: 'استلام هدايا', value: 'gifts', emoji: '1545029143777902702', description: 'استلام الجوائز والهدايا' },
+    { label: 'شيء اخر ..', value: 'other', emoji: '1450547743025008650', description: 'أي موضوع آخر' }
 ];
 
 const GuildSettings = mongoose.models.GuildSettings || mongoose.model(
@@ -677,11 +678,11 @@ app.post('/api/settings/:guildId', requireLogin, async (req, res) => {
 
                 updates[key] = number;
             } else if (key === 'selectOptions') {
-                if (!Array.isArray(value) || value.length !== 3) {
-                    return res.status(400).json({ error: 'يجب تحديد 3 خيارات للتذاكر.' });
+                if (!Array.isArray(value) || value.length !== 4) {
+                    return res.status(400).json({ error: 'يجب تحديد 4 خيارات للتذاكر.' });
                 }
 
-                const allowedValues = ['inquiry', 'complaint', 'technical'];
+                const allowedValues = ['inquiry', 'complaint', 'gifts', 'other'];
                 const cleanOptions = [];
 
                 for (let i = 0; i < value.length; i++) {
@@ -937,10 +938,16 @@ textarea{min-height:90px;resize:vertical}
                     <div class="field"><label for="option1description">الوصف</label><input id="option1description" maxlength="100" placeholder="تقديم شكوى"></div>
                 </div>
                 <div class="option">
-                    <h3>الخيار الثالث: مشكلة تقنية</h3>
+                    <h3>الخيار الثالث: استلام هدايا</h3>
                     <div class="field"><label for="option2label">الاسم الظاهر</label><input id="option2label" maxlength="100"></div>
                     <div class="field"><label for="option2emoji">الإيموجي</label><input id="option2emoji" maxlength="100"></div>
-                    <div class="field"><label for="option2description">الوصف</label><input id="option2description" maxlength="100" placeholder="مشكلة تقنية"></div>
+                    <div class="field"><label for="option2description">الوصف</label><input id="option2description" maxlength="100" placeholder="استلام هدايا"></div>
+                </div>
+                <div class="option">
+                    <h3>الخيار الرابع: شيء اخر ..</h3>
+                    <div class="field"><label for="option3label">الاسم الظاهر</label><input id="option3label" maxlength="100"></div>
+                    <div class="field"><label for="option3emoji">الإيموجي</label><input id="option3emoji" maxlength="100"></div>
+                    <div class="field"><label for="option3description">الوصف</label><input id="option3description" maxlength="100" placeholder="شيء اخر"></div>
                 </div>
             </section>
 
@@ -1098,12 +1105,14 @@ textarea{min-height:90px;resize:vertical}
         });
 
         const options = Array.isArray(settings.selectOptions) ? settings.selectOptions : [];
+        const defaultLabels = ['استفسار', 'شكوى', 'استلام هدايا', 'شيء اخر ..'];
+        const defaultEmojis = ['1493382115318960169', '1545031336274960384', '1545029143777902702', '1450547743025008650'];
 
-        for (let i = 0; i < 3; i++) {
+        for (let i = 0; i < 4; i++) {
             const option = options[i] || {};
 
-            setValue('option' + i + 'label', option.label || ['استفسار', 'شكوى', 'مشكلة تقنية'][i]);
-            setValue('option' + i + 'emoji', option.emoji || '');
+            setValue('option' + i + 'label', option.label || defaultLabels[i]);
+            setValue('option' + i + 'emoji', option.emoji || defaultEmojis[i]);
             setValue('option' + i + 'description', option.description || '');
         }
 
@@ -1189,9 +1198,15 @@ textarea{min-height:90px;resize:vertical}
             },
             {
                 label: getValue('option2label').trim(),
-                value: 'technical',
+                value: 'gifts',
                 emoji: getValue('option2emoji').trim(),
                 description: getValue('option2description').trim()
+            },
+            {
+                label: getValue('option3label').trim(),
+                value: 'other',
+                emoji: getValue('option3emoji').trim(),
+                description: getValue('option3description').trim()
             }
         ];
     }

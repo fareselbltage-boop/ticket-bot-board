@@ -54,7 +54,8 @@ const defaultAliases = {
     close: [{ alias: 'اغلاق', active: true }],
     delete: [{ alias: 'حذف', active: true }],
     addpoints: [{ alias: 'addpoints', active: true }],
-    removepoints: [{ alias: 'removepoints', active: true }]
+    removepoints: [{ alias: 'removepoints', active: true }],
+    resettop: [{ alias: 'تصفير-التوب', active: true }]
 };
 
 const GuildSettings = mongoose.models.GuildSettings || mongoose.model(
@@ -120,7 +121,7 @@ app.use(session({
 
 const COMMANDS = [
     'add', 'come', 'rename', 'claim', 'timeout',
-    'warn', 'close', 'delete', 'addpoints', 'removepoints'
+    'warn', 'close', 'delete', 'addpoints', 'removepoints', 'resettop'
 ];
 
 const COMMAND_NAMES = {
@@ -133,7 +134,8 @@ const COMMAND_NAMES = {
     close: 'قفل التذكرة (close)',
     delete: 'حذف التذكرة (delete)',
     addpoints: 'إضافة نقاط (addpoints)',
-    removepoints: 'إزالة نقاط (removepoints)'
+    removepoints: 'إزالة نقاط (removepoints)',
+    resettop: 'تصفير توب النقاط (reset top)'
 };
 
 const ALLOWED_FIELDS = [
@@ -921,7 +923,7 @@ textarea{min-height:90px;resize:vertical}
 
             <section class="panel" id="channels">
                 <h2>القنوات والرتب</h2>
-                <div class="field"><label for="staffRoleId">معرّف رتبة الإدارة</label><input id="staffRoleId" placeholder="Role ID"></div>
+                <div class="field"><label for="staffRoleId">معرّف رتبة الإدارة العامة</label><input id="staffRoleId" placeholder="Role ID"></div>
                 <div class="field"><label for="ticketCategoryId">معرّف كاتيجوري التذاكر</label><input id="ticketCategoryId" placeholder="Category ID"></div>
                 <div class="field"><label for="logChannelId">معرّف قناة اللوق</label><input id="logChannelId" placeholder="Channel ID"></div>
                 <p class="help">فعّل وضع المطوّر في Discord ثم اختر نسخ المعرّف من الرتبة أو القناة.</p>

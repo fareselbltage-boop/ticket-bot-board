@@ -12,7 +12,7 @@ const API = 'https://discord.com/api/v10';
 
 const REDIRECT_URI = process.env.REDIRECT_URI || 'https://ticket-bot-board.vercel.app/api/auth/callback';
 const MONGO_URI = process.env.MONGO_URI;
-const BOT_TOKEN = process.env.TOKEN;
+const BOT_TOKEN = process.env.TOKEN || process.env.BOT_TOKEN || process.env.DISCORD_BOT_TOKEN;
 const BOT_NAME = process.env.BOT_NAME || 'Light Ticket Bot';
 const BOT_AVATAR = process.env.BOT_AVATAR || 'https://i.postimg.cc/tJW3r0PJ/Screenshot-20261001-232609-ibis-Paint-X.jpg';
 const SITE_BG = 'https://i.postimg.cc/s2x5kG7S/1791496064027.jpg';
@@ -26,7 +26,7 @@ if (!process.env.CLIENT_ID || !process.env.CLIENT_SECRET) {
 }
 
 if (!BOT_TOKEN) {
-    console.warn('WARNING: TOKEN is missing.');
+    console.warn('WARNING: BOT_TOKEN / TOKEN is missing.');
 }
 
 if (!MONGO_URI) {
@@ -197,8 +197,53 @@ function requireLogin(req, res, next) {
     next();
 }
 
-async function getFreshUserGuilds(req) {
+async function getFreshUserGuilds(req, forceRefresh = false) {
+    if (!forceRefresh && req.session.guilds && Array.isArray(req.session.guilds) && req.session.guilds.length > 0) {
+        return req.session.guilds;
+    }
+
     let accessToken = req.session.accessToken;
+
+    async function fetchGuilds(token) {
+        const response = await axios.get(`${API}/users/@me/guilds`, {
+            headers: { Authorization: `Bearer ${token}` },
+            timeout: 10000
+        });
+
+        const manageableGuilds = response.data.filter(guild => {
+            const permissions = BigInt(guild.permissions || '0');
+            return (permissions & 8n) === 8n || (permissions & 32n) === 32n;
+        });
+
+        const checks = await Promise.all(
+            manageableGuilds.map(async guild => {
+                try {
+                    await axios.get(`${API}/guilds/${guild.id}`, {
+                        headers: { Authorization: `Bot ${BOT_TOKEN}` },
+                        timeout: 7000
+                    });
+                    return guild;
+                } catch (error) {
+                    return null;
+                }
+            })
+        );
+
+        return checks.filter(Boolean);
+    }
+
+    if (accessToken) {
+        try {
+            const guilds = await fetchGuilds(accessToken);
+            req.session.guilds = guilds;
+            return guilds;
+        } catch (error) {
+            if (error.response?.status !== 401) {
+                if (req.session.guilds) return req.session.guilds;
+                throw error;
+            }
+        }
+    }
 
     if (req.session.refreshToken) {
         try {
@@ -212,66 +257,27 @@ async function getFreshUserGuilds(req) {
                 }).toString(),
                 {
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    timeout: 15000
+                    timeout: 10000
                 }
             );
 
             accessToken = refreshResponse.data.access_token;
             req.session.accessToken = accessToken;
-
             if (refreshResponse.data.refresh_token) {
                 req.session.refreshToken = refreshResponse.data.refresh_token;
             }
-        } catch (error) {
-            if (!accessToken || [400, 401].includes(error.response?.status)) {
-                req.session.accessToken = null;
-                req.session.refreshToken = null;
-                throw new Error('Discord session expired');
-            }
 
-            console.error('Refresh token error:', error.response?.data || error.message);
+            const guilds = await fetchGuilds(accessToken);
+            req.session.guilds = guilds;
+            return guilds;
+        } catch (error) {
+            req.session.accessToken = null;
+            req.session.refreshToken = null;
+            throw new Error('Discord session expired');
         }
     }
 
-    if (!accessToken) {
-        throw new Error('Discord login required');
-    }
-
-    const response = await axios.get(`${API}/users/@me/guilds`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-        timeout: 15000
-    });
-
-    const manageableGuilds = response.data.filter(guild => {
-        const permissions = BigInt(guild.permissions || '0');
-
-        return (permissions & 8n) === 8n || (permissions & 32n) === 32n;
-    });
-
-    const checks = await Promise.all(
-        manageableGuilds.map(async guild => {
-            try {
-                await axios.get(`${API}/guilds/${guild.id}`, {
-                    headers: { Authorization: `Bot ${BOT_TOKEN}` },
-                    timeout: 10000
-                });
-
-                return guild;
-            } catch (error) {
-                if (![403, 404].includes(error.response?.status)) {
-                    console.error(
-                        `Guild check failed (${guild.id}):`,
-                        error.response?.data || error.message
-                    );
-                }
-
-                return null;
-            }
-        })
-    );
-
-    req.session.guilds = checks.filter(Boolean);
-    return req.session.guilds;
+    throw new Error('Discord login required');
 }
 
 async function isAuthorizedGuild(req, guildId) {
@@ -424,7 +430,7 @@ ${loginError}
 
 app.get('/dashboard', requireLogin, async (req, res) => {
     try {
-        const guilds = await getFreshUserGuilds(req);
+        const guilds = await getFreshUserGuilds(req, true);
         const user = req.session.user;
         const username = escapeHtml(user.global_name || user.username);
         const userAvatar = user.avatar
@@ -522,7 +528,7 @@ app.get('/api/roles/:guildId', requireLogin, async (req, res) => {
         }
 
         if (!BOT_TOKEN) {
-            return res.status(500).json({ error: 'إعدادات توكن البوت غير مكتملة.' });
+            return res.status(500).json({ error: 'إعدادات توكن البوت غير مكتملة (تأكد من وجود TOKEN في المتغيرات).' });
         }
 
         if (!(await isAuthorizedGuild(req, guildId))) {
@@ -551,7 +557,7 @@ app.get('/api/roles/:guildId', requireLogin, async (req, res) => {
             return res.status(401).json({ error: 'انتهت جلسة Discord. سجّل الدخول مجدداً.' });
         }
 
-        return res.status(500).json({ error: 'تعذّر تحميل الرتب.' });
+        return res.status(500).json({ error: 'تعذّر تحميل الرتب من Discord.' });
     }
 });
 
@@ -947,7 +953,7 @@ textarea{min-height:90px;resize:vertical}
 
             <section class="panel" id="permissions">
                 <h2>صلاحيات الأوامر</h2>
-                <p class="help">إذا لم تختر أي رتبة لأمر، فسيكون متاحاً للجميع حسب منطق البوت. عند اختيار رتب، يُسمح لحاملي واحدة منها باستخدام الأمر. يجب أن يطبّق كود البوت هذه الإعدادات فعلياً.</p>
+                <p class="help">إذا لم تختر أي رتبة لأمر، فسيكون متاحاً للجميع حسب منطق البوت. عند اختيار رتب، يُسمح لحاملي واحدة منها باستخدام الأمر.</p>
                 <div id="permissionFields"><div class="empty">جارٍ تحميل الرتب...</div></div>
             </section>
 
@@ -1110,20 +1116,34 @@ textarea{min-height:90px;resize:vertical}
         status.textContent = 'جارٍ تحميل الإعدادات...';
 
         try {
-            const results = await Promise.all([
-                fetch('/api/settings/' + encodeURIComponent(guildId), { credentials: 'same-origin' }),
-                fetch('/api/roles/' + encodeURIComponent(guildId), { credentials: 'same-origin' })
-            ]);
+            const settingsRes = await fetch('/api/settings/' + encodeURIComponent(guildId), { credentials: 'same-origin' });
+            const settingsData = await settingsRes.json().catch(() => ({}));
 
-            if (!results[0].ok || !results[1].ok) {
-                throw new Error('تعذّر تحميل البيانات. حدّث الصفحة أو سجّل الدخول من جديد.');
+            if (!settingsRes.ok) {
+                throw new Error(settingsData.error || 'تعذّر تحميل إعدادات السيرفر.');
             }
 
-            currentSettings = await results[0].json();
-            roles = await results[1].json();
+            currentSettings = settingsData;
+
+            try {
+                const rolesRes = await fetch('/api/roles/' + encodeURIComponent(guildId), { credentials: 'same-origin' });
+                const rolesData = await rolesRes.json().catch(() => ([]));
+
+                if (rolesRes.ok && Array.isArray(rolesData)) {
+                    roles = rolesData;
+                } else {
+                    roles = [];
+                    status.textContent = 'تنبيه: ' + (rolesData.error || 'تعذّر تحميل الرتب.');
+                }
+            } catch (roleErr) {
+                roles = [];
+                status.textContent = 'تنبيه: تعذّر الاتصال بجلب الرتب.';
+            }
 
             fillForm(currentSettings);
-            status.textContent = '';
+            if (!status.textContent.startsWith('تنبيه:')) {
+                status.textContent = '';
+            }
         } catch (error) {
             status.textContent = error.message || 'حدث خطأ أثناء التحميل.';
         }

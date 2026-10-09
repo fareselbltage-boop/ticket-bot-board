@@ -181,11 +181,17 @@ function plainSettings(settings) {
 
 function requireLogin(req, res, next) {
     if (!req.session?.user || (!req.session.accessToken && !req.session.refreshToken)) {
+        if (req.session) {
+            req.session.user = null;
+            req.session.accessToken = null;
+            req.session.refreshToken = null;
+        }
+
         if (req.path.startsWith('/api/')) {
             return res.status(401).json({ error: 'انتهت جلسة تسجيل الدخول. سجّل دخولك مجدداً.' });
         }
 
-        return res.redirect('/');
+        return res.redirect('/?error=login');
     }
 
     next();
@@ -367,7 +373,9 @@ app.get('/logout', (req, res) => {
 });
 
 app.get('/', (req, res) => {
-    if (req.session?.user) return res.redirect('/dashboard');
+    if (req.session?.user && (req.session.accessToken || req.session.refreshToken) && !req.query.error) {
+        return res.redirect('/dashboard');
+    }
 
     const botName = escapeHtml(BOT_NAME);
     const botAvatar = validUrl(BOT_AVATAR) ? BOT_AVATAR : '';
@@ -493,6 +501,11 @@ h1{font-size:28px;margin-bottom:8px}
         console.error('Dashboard error:', error.response?.data || error.message);
 
         if (error.message === 'Discord session expired' || error.message === 'Discord login required') {
+            if (req.session) {
+                req.session.user = null;
+                req.session.accessToken = null;
+                req.session.refreshToken = null;
+            }
             return res.redirect('/?error=login');
         }
 
@@ -1227,6 +1240,11 @@ textarea{min-height:90px;resize:vertical}
         console.error('Guild settings page error:', error.response?.data || error.message);
 
         if (error.message === 'Discord session expired' || error.message === 'Discord login required') {
+            if (req.session) {
+                req.session.user = null;
+                req.session.accessToken = null;
+                req.session.refreshToken = null;
+            }
             return res.redirect('/?error=login');
         }
 

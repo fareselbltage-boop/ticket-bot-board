@@ -362,6 +362,14 @@ app.post('/api/settings/:guildId', requireLogin, async (req, res) => {
                 updates.prefix = String(value !== undefined ? value : '').trim();
             } else if (key === 'renameCooldown') {
                 updates.renameCooldown = Number(value) || 0;
+            } else if (key === 'rolePointsConfig') {
+                if (Array.isArray(value)) {
+                    updates.rolePointsConfig = value.map(item => ({
+                        roleId: String(item.roleId || ''),
+                        command: String(item.command || 'claim'),
+                        points: Number(item.points) || 1
+                    })).filter(item => validSnowflake(item.roleId));
+                }
             } else if (key === 'commandAliases') {
                 if (typeof value === 'object' && value !== null) {
                     const cleanAliases = {};
@@ -475,9 +483,9 @@ input:focus,textarea:focus,select:focus{border-color:#5865f2}
             </section>
             <section class="panel" id="rolepoints">
                 <h2>نقاط الرتب بالأمر</h2>
-                <p class="help">حدد النقاط لكل أمر ورتبة. (إذا امتلك العضو رتبتين، سيتم تطبيق الرتبة ذات النقاط الأعلى تلقائياً).</p>
+                <p class="help">اختر الرتبة، ثم حدد عدد النقاط لكل أمر أدناها.</p>
                 <div id="rolePointsContainer"></div>
-                <button type="button" class="btn-sm btn-add" onclick="addRolePointConfig()">+ اضافة رتبه</button>
+                <button type="button" class="btn-sm btn-add" onclick="addRolePointConfig()">+ اضافة رتبه جديدة</button>
             </section>
             <section class="panel" id="autoreplies">
                 <h2>الرد التلقائي</h2>
@@ -537,24 +545,43 @@ input:focus,textarea:focus,select:focus{border-color:#5865f2}
         }
     }
 
+    window.removeRolePointGroup = function(idx) {
+        rolePointsData.splice(idx, 1);
+        renderRolePoints();
+    }
+
     function renderRolePoints() {
         const c = document.getElementById('rolePointsContainer');
         c.innerHTML = '';
-        rolePointsData.forEach((item, idx) => {
+        rolePointsData.forEach((group, gIdx) => {
             let rOpts = '<option value="">-- اختر الرتبة --</option>';
-            roles.forEach(r => { rOpts += '<option value="' + r.id + '" ' + (item.roleId === r.id ? 'selected' : '') + '>' + escapeHtml(r.name) + '</option>'; });
-            let cOpts = '';
-            commandsList.forEach(cmd => { cOpts += '<option value="' + cmd.id + '" ' + (item.command === cmd.id ? 'selected' : '') + '>' + cmd.name + '</option>'; });
+            roles.forEach(r => { rOpts += '<option value="' + r.id + '" ' + (group.roleId === r.id ? 'selected' : '') + '>' + escapeHtml(r.name) + '</option>'; });
+
+            let cmdsHtml = '';
+            commandsList.forEach(cmd => {
+                let pts = (group.commands && group.commands[cmd.id] !== undefined) ? group.commands[cmd.id] : 1;
+                cmdsHtml += \`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;background:#141620;padding:8px 12px;border-radius:8px">
+                    <span style="font-size:13px;color:#cbd5e1">\${cmd.name}</span>
+                    <input type="number" value="\${pts}" style="width:90px;padding:6px 10px" oninput="rolePointsData[\${gIdx}].commands['\${cmd.id}']=Number(this.value)">
+                </div>\`;
+            });
+
             const d = document.createElement('div');
             d.className = 'alias-card';
-            d.innerHTML = \`<div class="field"><label>الرتبة</label><select onchange="rolePointsData[\${idx}].roleId=this.value">\${rOpts}</select></div>
-                <div class="field"><label>الأمر</label><select onchange="rolePointsData[\${idx}].command=this.value">\${cOpts}</select></div>
-                <div class="field"><label>عدد النقاط</label><input type="number" value="\${item.points ?? 1}" oninput="rolePointsData[\${idx}].points=Number(this.value)"></div>
-                <button type="button" class="btn-sm btn-danger" onclick="rolePointsData.splice(\${idx},1);renderRolePoints()">حذف</button>\`;
+            d.innerHTML = \`<div class="field"><label>الرتبة</label><select onchange="rolePointsData[\${gIdx}].roleId=this.value">\${rOpts}</select></div>
+                <label style="margin:12px 0 8px;display:block;color:#94a3b8;font-weight:bold">نقاط الأوامر لهذه الرتبة:</label>
+                \${cmdsHtml}
+                <button type="button" class="btn-sm btn-danger" style="margin-top:10px" onclick="window.removeRolePointGroup(\${gIdx})">حذف هذه الرتبة بالكامل</button>\`;
             c.appendChild(d);
         });
     }
-    window.addRolePointConfig = () => { rolePointsData.push({ roleId: '', command: 'claim', points: 1 }); renderRolePoints(); };
+
+    window.addRolePointConfig = () => {
+        let defaultCmds = {};
+        commandsList.forEach(cmd => { defaultCmds[cmd.id] = 1; });
+        rolePointsData.push({ roleId: '', commands: defaultCmds });
+        renderRolePoints();
+    };
 
     function renderAutoReplies() {
         const c = document.getElementById('autoReplyContainer');
@@ -580,7 +607,26 @@ input:focus,textarea:focus,select:focus{border-color:#5865f2}
         ]);
         roles = Array.isArray(rRes) ? rRes : [];
         commandAliasesData = sRes.commandAliases || ${JSON.stringify(defaultAliases)};
-        rolePointsData = sRes.rolePointsConfig || [];
+        
+        // تحويل البيانات القديمة إلى الشكل الجديد الجماعي إذا لزم الأمر
+        if (Array.isArray(sRes.rolePointsConfig)) {
+            if (sRes.rolePointsConfig.length > 0 && sRes.rolePointsConfig[0].commands === undefined) {
+                let grouped = {};
+                sRes.rolePointsConfig.forEach(item => {
+                    if (!grouped[item.roleId]) {
+                        grouped[item.roleId] = {};
+                        commandsList.forEach(cmd => { grouped[item.roleId][cmd.id] = 1; });
+                    }
+                    grouped[item.roleId][item.command] = item.points;
+                });
+                rolePointsData = Object.keys(grouped).map(rId => ({ roleId: rId, commands: grouped[rId] }));
+            } else {
+                rolePointsData = sRes.rolePointsConfig;
+            }
+        } else {
+            rolePointsData = [];
+        }
+
         autoRepliesData = sRes.autoReplies || [];
 
         ['prefix','botName','botAvatar','activityText','staffRoleId','ticketCategoryId','logChannelId','renameCooldown'].forEach(k => {

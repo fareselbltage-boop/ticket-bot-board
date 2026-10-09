@@ -44,6 +44,19 @@ const defaultOptions = [
     { label: 'شيء اخر ..', value: 'other', emoji: '1450547743025008650', description: 'أي موضوع آخر' }
 ];
 
+const defaultAliases = {
+    add: [{ alias: 'add', active: true }],
+    come: [{ alias: 'come', active: true }],
+    rename: [{ alias: 'rename', active: true }],
+    claim: [{ alias: 'استلام', active: true }],
+    timeout: [{ alias: 'تايم', active: true }],
+    warn: [{ alias: 'تحذير', active: true }],
+    close: [{ alias: 'اغلاق', active: true }],
+    delete: [{ alias: 'حذف', active: true }],
+    addpoints: [{ alias: 'addpoints', active: true }],
+    removepoints: [{ alias: 'removepoints', active: true }]
+};
+
 const GuildSettings = mongoose.models.GuildSettings || mongoose.model(
     'GuildSettings',
     new mongoose.Schema({
@@ -69,19 +82,8 @@ const GuildSettings = mongoose.models.GuildSettings || mongoose.model(
         commandPermissions: { type: Map, of: [String], default: {} },
         commandAliases: {
             type: Map,
-            of: String,
-            default: {
-                add: 'add',
-                come: 'come',
-                rename: 'rename',
-                claim: 'استلام',
-                timeout: 'تايم',
-                warn: 'تحذير',
-                close: 'اغلاق',
-                delete: 'حذف',
-                addpoints: 'addpoints',
-                removepoints: 'removepoints'
-            }
+            of: mongoose.Schema.Types.Mixed,
+            default: defaultAliases
         }
     }, { timestamps: true })
 );
@@ -122,16 +124,16 @@ const COMMANDS = [
 ];
 
 const COMMAND_NAMES = {
-    add: 'إضافة عضو -add',
-    come: 'استدعاء إداري -come',
-    rename: 'إعادة تسمية -rename',
-    claim: 'استلام التذكرة',
-    timeout: 'تايم عضو -تايم',
-    warn: 'تحذير عضو -تحذير',
-    close: 'قفل التذكرة',
-    delete: 'حذف التذكرة',
-    addpoints: 'إضافة نقاط',
-    removepoints: 'إزالة نقاط'
+    add: 'إضافة عضو (add)',
+    come: 'استدعاء إداري (come)',
+    rename: 'إعادة تسمية (rename)',
+    claim: 'استلام التذكرة (claim)',
+    timeout: 'تايم عضو (timeout)',
+    warn: 'تحذير عضو (warn)',
+    close: 'قفل التذكرة (close)',
+    delete: 'حذف التذكرة (delete)',
+    addpoints: 'إضافة نقاط (addpoints)',
+    removepoints: 'إزالة نقاط (removepoints)'
 };
 
 const ALLOWED_FIELDS = [
@@ -613,11 +615,11 @@ app.post('/api/settings/:guildId', requireLogin, async (req, res) => {
             const value = body[key];
 
             if (key === 'prefix') {
-                if (typeof value !== 'string' || value.length < 1 || value.length > 5) {
-                    return res.status(400).json({ error: 'البادئة يجب أن تكون من 1 إلى 5 أحرف.' });
+                if (typeof value !== 'string' || value.length > 5) {
+                    return res.status(400).json({ error: 'البادئة يجب أن تكون أقصاها 5 أحرف.' });
                 }
 
-                updates.prefix = value;
+                updates.prefix = value.trim();
             } else if (['staffRoleId', 'ticketCategoryId', 'logChannelId'].includes(key)) {
                 if (typeof value !== 'string' || (value !== '' && !validSnowflake(value))) {
                     return res.status(400).json({ error: `قيمة ${key} غير صحيحة.` });
@@ -733,13 +735,17 @@ app.post('/api/settings/:guildId', requireLogin, async (req, res) => {
 
                         clean[command] = [...new Set(ids)];
                     } else {
-                        const alias = value[command];
-
-                        if (typeof alias !== 'string' || alias.length > 32 || /\s/.test(alias)) {
-                            return res.status(400).json({ error: 'اختصار الأمر يجب أن يكون كلمة واحدة وبحد أقصى 32 حرفاً.' });
+                        const rawAliases = value[command];
+                        if (Array.isArray(rawAliases)) {
+                            clean[command] = rawAliases.map(item => ({
+                                alias: String(item.alias || '').trim(),
+                                active: Boolean(item.active)
+                            })).filter(item => item.alias.length > 0);
+                        } else if (typeof rawAliases === 'string' && rawAliases.trim().length > 0) {
+                            clean[command] = [{ alias: rawAliases.trim(), active: true }];
+                        } else {
+                            clean[command] = [];
                         }
-
-                        clean[command] = alias.trim();
                     }
                 }
 
@@ -849,6 +855,13 @@ textarea{min-height:90px;resize:vertical}
 .role-choice span{overflow-wrap:anywhere}
 .option{padding:14px;border:1px solid #35394b;border-radius:11px;margin-bottom:12px}
 .empty{color:#a6aabd;font-size:13px;line-height:1.8}
+
+.alias-card{background:#12141c;border:1px solid #3a3e52;padding:15px;border-radius:10px;margin-bottom:12px}
+.alias-item{display:flex;align-items:center;gap:10px;margin-top:8px}
+.btn-sm{padding:6px 12px;border-radius:6px;border:0;cursor:pointer;font-size:12px;font-weight:bold}
+.btn-add{background:#57f287;color:#000}
+.btn-danger{background:#ed4245;color:#fff}
+.btn-toggle{background:#fee75c;color:#000}
 @media(max-width:750px){.layout{grid-template-columns:1fr}nav{position:static;display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.grid{grid-template-columns:1fr}section.panel{padding:15px}header{padding:14px}}
 </style>
 </head>
@@ -953,9 +966,12 @@ textarea{min-height:90px;resize:vertical}
 
             <section class="panel" id="aliases">
                 <h2>البادئة والاختصارات</h2>
-                <div class="field"><label for="prefix">بادئة الأوامر</label><input id="prefix" maxlength="5" placeholder="-"></div>
-                <p class="help">اترك اختصار الأمر فارغاً إذا كنت لا تريد اختصاراً مخصصاً له.</p>
-                <div id="aliasFields"></div>
+                <div class="field">
+                    <label for="prefix">بادئة الأوامر (Prefix)</label>
+                    <input id="prefix" maxlength="5" placeholder="مثال: - أو اتركها فارغة ليعمل بدون Prefix">
+                </div>
+                <p class="help">يمكنك إضافة أكثر من اختصار لكل أمر وتفعيلها أو إيقافها، وعند ترك البادئة فارغة ستعمل الأوامر مباشرة.</p>
+                <div id="aliasContainer"></div>
             </section>
 
             <section class="panel" id="permissions">
@@ -990,6 +1006,7 @@ textarea{min-height:90px;resize:vertical}
 
     let currentSettings = {};
     let roles = [];
+    let aliasesData = {};
 
     document.querySelectorAll('#tabs button').forEach(function (button) {
         button.addEventListener('click', function () {
@@ -1019,31 +1036,70 @@ textarea{min-height:90px;resize:vertical}
         return element ? element.value : '';
     }
 
-    function makeAliasFields(settings) {
-        const container = document.getElementById('aliasFields');
+    function renderAliases() {
+        const container = document.getElementById('aliasContainer');
         container.innerHTML = '';
 
-        Object.keys(commandNames).forEach(function (command) {
-            const field = document.createElement('div');
-            field.className = 'field';
+        Object.keys(commandNames).forEach(function (cmd) {
+            const card = document.createElement('div');
+            card.className = 'alias-card';
+            
+            let list = Array.isArray(aliasesData[cmd]) ? aliasesData[cmd] : [];
+            
+            card.innerHTML = '<strong>' + commandNames[cmd] + '</strong>';
+            
+            const listDiv = document.createElement('div');
+            list.forEach(function (item, index) {
+                const row = document.createElement('div');
+                row.className = 'alias-item';
+                row.innerHTML = \`
+                    <input type="text" value="\${item.alias}" placeholder="اكتب الاختصار" onchange="updateAlias('\${cmd}', \${index}, this.value)">
+                    <button type="button" class="btn-sm btn-toggle" onclick="toggleAlias('\${cmd}', \${index})">\${item.active ? 'مفعل' : 'معطل'}</button>
+                    <button type="button" class="btn-sm btn-danger" onclick="deleteAlias('\${cmd}', \${index})">حذف</button>
+                \`;
+                listDiv.appendChild(row);
+            });
 
-            const label = document.createElement('label');
-            label.htmlFor = 'alias_' + command;
-            label.textContent = commandNames[command];
+            const addBtn = document.createElement('button');
+            addBtn.type = 'button';
+            addBtn.className = 'btn-sm btn-add';
+            addBtn.style.marginTop = '10px';
+            addBtn.textContent = '+ إضافة اختصار جديد';
+            addBtn.onclick = function() { addAlias(cmd); };
 
-            const input = document.createElement('input');
-            input.id = 'alias_' + command;
-            input.maxLength = 32;
-            input.placeholder = 'اختصار اختياري';
-            input.value = settings.commandAliases && settings.commandAliases[command]
-                ? settings.commandAliases[command]
-                : '';
-
-            field.appendChild(label);
-            field.appendChild(input);
-            container.appendChild(field);
+            card.appendChild(listDiv);
+            card.appendChild(addBtn);
+            container.appendChild(card);
         });
     }
+
+    window.updateAlias = function(cmd, idx, val) {
+        if (aliasesData[cmd] && aliasesData[cmd][idx]) {
+            aliasesData[cmd][idx].alias = val.trim();
+        }
+    };
+
+    window.toggleAlias = function(cmd, idx) {
+        if (aliasesData[cmd] && aliasesData[cmd][idx]) {
+            aliasesData[cmd][idx].active = !aliasesData[cmd][idx].active;
+            renderAliases();
+        }
+    };
+
+    window.deleteAlias = function(cmd, idx) {
+        if (aliasesData[cmd]) {
+            aliasesData[cmd].splice(idx, 1);
+            renderAliases();
+        }
+    };
+
+    window.addAlias = function(cmd) {
+        if (!aliasesData[cmd] || !Array.isArray(aliasesData[cmd])) {
+            aliasesData[cmd] = [];
+        }
+        aliasesData[cmd].push({ alias: '', active: true });
+        renderAliases();
+    };
 
     function makePermissionFields(settings) {
         const container = document.getElementById('permissionFields');
@@ -1116,7 +1172,16 @@ textarea{min-height:90px;resize:vertical}
             setValue('option' + i + 'description', option.description || '');
         }
 
-        makeAliasFields(settings);
+        aliasesData = settings.commandAliases || {};
+        Object.keys(commandNames).forEach(function(cmd) {
+            if (!aliasesData[cmd]) {
+                aliasesData[cmd] = [];
+            } else if (typeof aliasesData[cmd] === 'string') {
+                aliasesData[cmd] = [{ alias: aliasesData[cmd], active: true }];
+            }
+        });
+
+        renderAliases();
         makePermissionFields(settings);
     }
 
@@ -1172,16 +1237,6 @@ textarea{min-height:90px;resize:vertical}
         return permissions;
     }
 
-    function collectAliases() {
-        const aliases = {};
-
-        Object.keys(commandNames).forEach(function (command) {
-            aliases[command] = getValue('alias_' + command).trim();
-        });
-
-        return aliases;
-    }
-
     function collectOptions() {
         return [
             {
@@ -1233,7 +1288,7 @@ textarea{min-height:90px;resize:vertical}
             ticketImage: getValue('ticketImage').trim(),
             selectOptions: collectOptions(),
             prefix: getValue('prefix'),
-            commandAliases: collectAliases(),
+            commandAliases: aliasesData,
             commandPermissions: collectPermissions(),
             claimPoints: Number(getValue('claimPoints')),
             warnPoints: Number(getValue('warnPoints')),

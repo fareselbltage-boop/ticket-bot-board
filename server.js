@@ -154,9 +154,9 @@ const GuildSettings = mongoose.models.GuildSettings || mongoose.model(
         ticketCategoryId: { type: String, default: '1555176022352208012' },
         logChannelId: { type: String, default: '1555488444182962216' },
         logChannels: logChannelsSchemaObj,
-        logViewerRoles: { type: [String], default: ['1549728006409293854'] }, // 📌 الرتب المسموح لها برؤية اللوقات
+        logViewerRoles: { type: [String], default: ['1549728006409293854'] },
         panelImage: { type: String, default: 'https://i.postimg.cc/j5x6JgQH/Untitled900-20260927182744.jpg' },
-        ticketImage: { type: String, default: 'https://i.postimg.cc/j5x6JgQH/Untitled900-20260927182744.jpg' },
+        ticketImage: { type: String, default: 'https://i.postimg.cc/j5x6JgQH/Untitled900-20260927182744.jpg' }, // 📌 صورة التكت من الداخل
         panelTitle: { type: String, default: '🎫 LIGHT Support | الدعم الفني' },
         panelDescription: { type: String, default: 'مرحباً بك في نظام الدعم الفني الخاص بسيرفر LIGHT.' },
         botName: { type: String, default: 'Light Ticket Bot' },
@@ -322,7 +322,6 @@ async function getFreshUserGuilds(req, forceRefresh = false) {
                     const hasPerms = (permissions & 8n) === 8n || (permissions & 32n) === 32n;
                     if (hasPerms) return guild;
 
-                    // 📌 فحص ما إذا كان المستخدم يمتلك رتبة التحكم في الداشبورد داخل السيرفر
                     const memberRes = await axios.get(`${API}/guilds/${guild.id}/members/${req.session.user.id}`, {
                         headers: { Authorization: `Bot ${BOT_TOKEN}` },
                         timeout: 7000
@@ -399,7 +398,6 @@ async function isAuthorizedGuild(req, guildId) {
         return true;
     }
 
-    // 📌 التحقق المباشر من امتلاك رتبة التحكم في الداشبورد
     try {
         const memberRes = await axios.get(`${API}/guilds/${guildId}/members/${req.session.user.id}`, {
             headers: { Authorization: `Bot ${BOT_TOKEN}` },
@@ -995,7 +993,6 @@ textarea{min-height:90px;resize:vertical}
                    ${logFieldsHtml}
                 </div>
 
-                <!-- 📌 اختيار الرتب المسموح لها برؤية اللوقات -->
                 <div style="margin-top:25px;border-top:1px solid #303344;padding-top:18px;">
                     <h3>👥 الرتب المسموح لها برؤية اللوقات</h3>
                     <p class="help">اختر الرتب التي تمتلك صلاحية رؤية رومات اللوقات (اضغط مع الاستمرار على Ctrl أو Shift لتحديد أكثر من رتبة):</p>
@@ -1004,12 +1001,13 @@ textarea{min-height:90px;resize:vertical}
                 </div>
             </section>
 
+            <!-- 📌 تم تحديث قسم لوحة التذاكر والبانل ليشمل تعديل صورة اللوحة الخارجيّة وصورة التكت الداخلي معاً -->
             <section class="panel" id="panel">
                 <h2>لوحة التذاكر</h2>
                 <div class="field"><label for="panelTitle">عنوان اللوحة</label><input id="panelTitle" maxlength="200" placeholder="الدعم الفني"></div>
                 <div class="field"><label for="panelDescription">وصف اللوحة</label><textarea id="panelDescription" maxlength="2000" placeholder="اكتب وصف لوحة الدعم الفني"></textarea></div>
-                <div class="field"><label for="panelImage">رابط صورة اللوحة</label><input id="panelImage" type="url" placeholder="https://..."></div>
-                <div class="field"><label for="ticketImage">رابط صورة التذكرة</label><input id="ticketImage" type="url" placeholder="https://..."></div>
+                <div class="field"><label for="panelImage">رابط صورة البانل الخارجي (Panel Image)</label><input id="panelImage" type="url" placeholder="https://..."></div>
+                <div class="field"><label for="ticketImage">رابط صورة التكت الداخلي (Ticket Embed Image)</label><input id="ticketImage" type="url" placeholder="https://..."></div>
             </section>
 
             <section class="panel" id="options">
@@ -1571,7 +1569,7 @@ textarea{min-height:90px;resize:vertical}
             panelTitle: getValue('panelTitle').trim(),
             panelDescription: getValue('panelDescription').trim(),
             panelImage: getValue('panelImage').trim(),
-            ticketImage: getValue('ticketImage').trim(),
+            ticketImage: getValue('ticketImage').trim(), // 📌 إرسال رابط صورة التكت الداخلي مع الحفظ
             selectOptions: collectOptions(),
             autoReplies: autoRepliesData,
             rolePointsConfig: rolePointsData,

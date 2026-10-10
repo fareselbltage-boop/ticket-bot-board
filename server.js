@@ -114,6 +114,35 @@ const defaultAliases = {
     resettop: [{ alias: 'تصفير-التوب', active: true }]
 };
 
+const LOG_FIELDS = [
+  { key: 'server', label: 'لوق • السيرفر' },
+  { key: 'roles', label: 'لوق • الرتب' },
+  { key: 'bans', label: 'لوق • الباند' },
+  { key: 'messages', label: 'لوق • رسائل' },
+  { key: 'kicks', label: 'لوق • الطرد' },
+  { key: 'members', label: 'لوق • اعضاء' },
+  { key: 'timeouts', label: 'لوق • تايم' },
+  { key: 'channels', label: 'لوق • رومات' },
+  { key: 'voice', label: 'لوق • فويس' },
+  { key: 'events', label: 'لوق • فعاليات' },
+  { key: 'automod', label: 'لوق • اوتو مود' },
+  { key: 'webhooks', label: 'لوق • ويب هوك' },
+  { key: 'nicknames', label: 'لوق • نك نيم' },
+  { key: 'invites', label: 'لوق • انفايت' },
+  { key: 'protection', label: 'لوق • حمايه' },
+  { key: 'joins_leaves', label: 'لوق • دخول / خروج' },
+  { key: 'tickets', label: 'لوق • تكتات' },
+  { key: 'mutes', label: 'لوق • ميوت' },
+  { key: 'admin', label: 'لوق • الادارة' },
+  { key: 'verification', label: 'لوق • توثيق' },
+  { key: 'announcements', label: 'لوق • اعلانات' }
+];
+
+const logChannelsSchemaObj = {};
+LOG_FIELDS.forEach(f => {
+    logChannelsSchemaObj[f.key] = { type: String, default: '' };
+});
+
 const GuildSettings = mongoose.models.GuildSettings || mongoose.model(
     'GuildSettings',
     new mongoose.Schema({
@@ -122,6 +151,7 @@ const GuildSettings = mongoose.models.GuildSettings || mongoose.model(
         staffRoleId: { type: String, default: '1555478928708337775' },
         ticketCategoryId: { type: String, default: '1555176022352208012' },
         logChannelId: { type: String, default: '1555488444182962216' },
+        logChannels: logChannelsSchemaObj,
         panelImage: { type: String, default: 'https://i.postimg.cc/j5x6JgQH/Untitled900-20260927182744.jpg' },
         ticketImage: { type: String, default: 'https://i.postimg.cc/j5x6JgQH/Untitled900-20260927182744.jpg' },
         panelTitle: { type: String, default: '🎫 LIGHT Support | الدعم الفني' },
@@ -201,7 +231,7 @@ const POINT_COMMANDS = {
 };
 
 const ALLOWED_FIELDS = [
-    'prefix', 'staffRoleId', 'ticketCategoryId', 'logChannelId',
+    'prefix', 'staffRoleId', 'ticketCategoryId', 'logChannelId', 'logChannels',
     'panelImage', 'ticketImage', 'panelTitle', 'panelDescription',
     'botName', 'botAvatar', 'botStatus', 'activityType', 'activityText',
     'renameCooldown', 'selectOptions', 'autoReplies', 'rolePointsConfig',
@@ -609,6 +639,37 @@ app.get('/api/roles/:guildId', requireLogin, async (req, res) => {
     }
 });
 
+app.get('/api/channels/:guildId', requireLogin, async (req, res) => {
+    try {
+        const { guildId } = req.params;
+
+        if (!validSnowflake(guildId)) {
+            return res.status(400).json({ error: 'معرّف السيرفر غير صحيح.' });
+        }
+
+        if (!(await isAuthorizedGuild(req, guildId))) {
+            return res.status(403).json({ error: 'ليس لديك صلاحية.' });
+        }
+
+        const response = await axios.get(`${API}/guilds/${guildId}/channels`, {
+            headers: { Authorization: `Bot ${BOT_TOKEN}` },
+            timeout: 15000
+        });
+
+        const channels = response.data
+            .filter(ch => ch.type === 0)
+            .map(ch => ({
+                id: ch.id,
+                name: ch.name
+            }));
+
+        res.set('Cache-Control', 'no-store');
+        return res.json(channels);
+    } catch (error) {
+        return res.status(500).json({ error: 'تعذّر تحميل القنوات من Discord.' });
+    }
+});
+
 app.get('/api/settings/:guildId', requireLogin, async (req, res) => {
     try {
         const { guildId } = req.params;
@@ -658,6 +719,12 @@ app.post('/api/settings/:guildId', requireLogin, async (req, res) => {
                 updates.prefix = String(value || '').trim();
             } else if (['staffRoleId', 'ticketCategoryId', 'logChannelId'].includes(key)) {
                 updates[key] = String(value || '').trim();
+            } else if (key === 'logChannels') {
+                const logsObj = {};
+                LOG_FIELDS.forEach(f => {
+                    logsObj[f.key] = String(value?.[f.key] || '').trim();
+                });
+                updates.logChannels = logsObj;
             } else if ([
                 'botName', 'botStatus', 'activityText',
                 'panelTitle', 'panelDescription', 'panelImage',
@@ -761,6 +828,13 @@ app.get('/dashboard/:guildId', requireLogin, async (req, res) => {
             guildName = guildResponse.data.name || guildName;
         } catch (error) {}
 
+        const logFieldsHtml = LOG_FIELDS.map(f => `
+            <div class="field">
+                <label for="log_${f.key}">${f.label}</label>
+                <select id="log_${f.key}" data-logkey="${f.key}" class="channel-select"><option value="">-- اختر القناة --</option></select>
+            </div>
+        `).join('');
+
         res.set('Cache-Control', 'no-store');
 
         return res.send(`<!DOCTYPE html>
@@ -832,6 +906,7 @@ textarea{min-height:90px;resize:vertical}
         <nav id="tabs">
             <button class="active" data-tab="general">إعدادات البوت</button>
             <button data-tab="channels">القنوات والرتب</button>
+            <button data-tab="logs">نظام اللوقات الشامل (21 قسم)</button>
             <button data-tab="panel">لوحة التذاكر</button>
             <button data-tab="options">خيارات التذاكر</button>
             <button data-tab="autoreplies">الرد التلقائي</button>
@@ -876,7 +951,15 @@ textarea{min-height:90px;resize:vertical}
                 <h2>القنوات والرتب</h2>
                 <div class="field"><label for="staffRoleId">معرّف رتبة الإدارة العامة</label><input id="staffRoleId" placeholder="Role ID"></div>
                 <div class="field"><label for="ticketCategoryId">معرّف كاتيجوري التذاكر</label><input id="ticketCategoryId" placeholder="Category ID"></div>
-                <div class="field"><label for="logChannelId">معرّف قناة اللوق</label><input id="logChannelId" placeholder="Channel ID"></div>
+                <div class="field"><label for="logChannelId">معرّف قناة اللوق القديمة</label><input id="logChannelId" placeholder="Channel ID"></div>
+            </section>
+
+            <section class="panel" id="logs">
+                <h2>إعدادات نظام اللوقات الشامل (Lit Logs System)</h2>
+                <p class="help" style="margin-bottom:15px;">حدد القناة الخاصة بكل قسم من الأقسام الـ 21 الظاهرة بالسيرفر لديك:</p>
+                <div class="grid">
+                   ${logFieldsHtml}
+                </div>
             </section>
 
             <section class="panel" id="panel">
@@ -967,9 +1050,11 @@ textarea{min-height:90px;resize:vertical}
     const guildId = ${JSON.stringify(guildId)};
     const commandNames = ${JSON.stringify(COMMAND_NAMES)};
     const pointCommands = ${JSON.stringify(POINT_COMMANDS)};
+    const logFields = ${JSON.stringify(LOG_FIELDS)};
 
     let currentSettings = {};
     let roles = [];
+    let channels = [];
     let aliasesData = {};
     let autoRepliesData = [];
     let rolePointsData = [];
@@ -1006,6 +1091,31 @@ textarea{min-height:90px;resize:vertical}
         return String(str || '').replace(/[&<>"']/g, function(m) {
             return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m];
         });
+    }
+
+    function populateChannelSelects(savedLogChannels = {}) {
+        document.querySelectorAll('.channel-select').forEach(sel => {
+            const currentVal = sel.value;
+            sel.innerHTML = '<option value="">-- اختر القناة --</option>';
+            channels.forEach(ch => {
+                const opt = document.createElement('option');
+                opt.value = ch.id;
+                opt.textContent = '#' + ch.name;
+                sel.appendChild(opt);
+            });
+            const key = sel.dataset.logkey;
+            if (key && savedLogChannels[key]) {
+                sel.value = savedLogChannels[key];
+            }
+        });
+    }
+
+    function collectLogChannels() {
+        const res = {};
+        logFields.forEach(f => {
+            res[f.key] = getValue('log_' + f.key);
+        });
+        return res;
     }
 
     function syncRolePointsFromDOM() {
@@ -1308,6 +1418,8 @@ textarea{min-height:90px;resize:vertical}
             setValue(key, settings[key]);
         });
 
+        populateChannelSelects(settings.logChannels || {});
+
         const options = Array.isArray(settings.selectOptions) ? settings.selectOptions : [];
         const defaultLabels = ['استفسار', 'شكوى', 'استلام هدايا', 'شيء اخر ..'];
         const defaultEmojis = ['1493382115318960169', '1545031336274960384', '1545029143777902702', '1450547743025008650'];
@@ -1346,6 +1458,9 @@ textarea{min-height:90px;resize:vertical}
 
             const rolesRes = await fetch('/api/roles/' + encodeURIComponent(guildId));
             roles = await rolesRes.json();
+
+            const channelsRes = await fetch('/api/channels/' + encodeURIComponent(guildId));
+            channels = await channelsRes.json();
 
             fillForm(currentSettings);
             status.textContent = '';
@@ -1390,6 +1505,7 @@ textarea{min-height:90px;resize:vertical}
             staffRoleId: getValue('staffRoleId').trim(),
             ticketCategoryId: getValue('ticketCategoryId').trim(),
             logChannelId: getValue('logChannelId').trim(),
+            logChannels: collectLogChannels(),
             panelTitle: getValue('panelTitle').trim(),
             panelDescription: getValue('panelDescription').trim(),
             panelImage: getValue('panelImage').trim(),

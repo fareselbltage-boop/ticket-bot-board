@@ -17,6 +17,8 @@ const BOT_NAME = process.env.BOT_NAME || 'Light Ticket Bot';
 const BOT_AVATAR = process.env.BOT_AVATAR || 'https://i.postimg.cc/tJW3r0PJ/Screenshot-20261001-232609-ibis-Paint-X.jpg';
 const SITE_BG = 'https://i.postimg.cc/s2x5kG7S/1791496064027.jpg';
 
+const DASHBOARD_ADMIN_ROLE = '1537865161103118538'; // 📌 رتبة التحكم في الداشبورد
+
 if (!MONGO_URI) {
     console.warn('WARNING: MONGO_URI is missing.');
 } else {
@@ -152,6 +154,7 @@ const GuildSettings = mongoose.models.GuildSettings || mongoose.model(
         ticketCategoryId: { type: String, default: '1555176022352208012' },
         logChannelId: { type: String, default: '1555488444182962216' },
         logChannels: logChannelsSchemaObj,
+        logViewerRoles: { type: [String], default: ['1549728006409293854'] }, // 📌 الرتب المسموح لها برؤية اللوقات
         panelImage: { type: String, default: 'https://i.postimg.cc/j5x6JgQH/Untitled900-20260927182744.jpg' },
         ticketImage: { type: String, default: 'https://i.postimg.cc/j5x6JgQH/Untitled900-20260927182744.jpg' },
         panelTitle: { type: String, default: '🎫 LIGHT Support | الدعم الفني' },
@@ -231,7 +234,7 @@ const POINT_COMMANDS = {
 };
 
 const ALLOWED_FIELDS = [
-    'prefix', 'staffRoleId', 'ticketCategoryId', 'logChannelId', 'logChannels',
+    'prefix', 'staffRoleId', 'ticketCategoryId', 'logChannelId', 'logChannels', 'logViewerRoles',
     'panelImage', 'ticketImage', 'panelTitle', 'panelDescription',
     'botName', 'botAvatar', 'botStatus', 'activityType', 'activityText',
     'renameCooldown', 'selectOptions', 'autoReplies', 'rolePointsConfig',
@@ -307,22 +310,31 @@ async function getFreshUserGuilds(req, forceRefresh = false) {
             timeout: 10000
         });
 
-        const manageableGuilds = response.data.filter(guild => {
-            const permissions = BigInt(guild.permissions || '0');
-            return (permissions & 8n) === 8n || (permissions & 32n) === 32n;
-        });
-
         const checks = await Promise.all(
-            manageableGuilds.map(async guild => {
+            response.data.map(async guild => {
                 try {
                     await axios.get(`${API}/guilds/${guild.id}`, {
                         headers: { Authorization: `Bot ${BOT_TOKEN}` },
                         timeout: 7000
                     });
-                    return guild;
+
+                    const permissions = BigInt(guild.permissions || '0');
+                    const hasPerms = (permissions & 8n) === 8n || (permissions & 32n) === 32n;
+                    if (hasPerms) return guild;
+
+                    // 📌 فحص ما إذا كان المستخدم يمتلك رتبة التحكم في الداشبورد داخل السيرفر
+                    const memberRes = await axios.get(`${API}/guilds/${guild.id}/members/${req.session.user.id}`, {
+                        headers: { Authorization: `Bot ${BOT_TOKEN}` },
+                        timeout: 7000
+                    });
+                    const memberRoles = memberRes.data.roles || [];
+                    if (memberRoles.includes(DASHBOARD_ADMIN_ROLE)) {
+                        return guild;
+                    }
                 } catch (error) {
                     return null;
                 }
+                return null;
             })
         );
 
@@ -383,7 +395,23 @@ async function isAuthorizedGuild(req, guildId) {
     }
 
     const guilds = await getFreshUserGuilds(req);
-    return guilds.some(guild => String(guild.id) === String(guildId));
+    if (guilds.some(guild => String(guild.id) === String(guildId))) {
+        return true;
+    }
+
+    // 📌 التحقق المباشر من امتلاك رتبة التحكم في الداشبورد
+    try {
+        const memberRes = await axios.get(`${API}/guilds/${guildId}/members/${req.session.user.id}`, {
+            headers: { Authorization: `Bot ${BOT_TOKEN}` },
+            timeout: 7000
+        });
+        const memberRoles = memberRes.data.roles || [];
+        if (memberRoles.includes(DASHBOARD_ADMIN_ROLE)) {
+            return true;
+        }
+    } catch (error) {}
+
+    return false;
 }
 
 app.get('/login', (req, res) => {
@@ -725,6 +753,12 @@ app.post('/api/settings/:guildId', requireLogin, async (req, res) => {
                     logsObj[f.key] = String(value?.[f.key] || '').trim();
                 });
                 updates.logChannels = logsObj;
+            } else if (key === 'logViewerRoles') {
+                if (Array.isArray(value)) {
+                    updates.logViewerRoles = value.map(id => String(id).trim()).filter(validSnowflake);
+                } else {
+                    updates.logViewerRoles = ['1549728006409293854'];
+                }
             } else if ([
                 'botName', 'botStatus', 'activityText',
                 'panelTitle', 'panelDescription', 'panelImage',
@@ -960,6 +994,14 @@ textarea{min-height:90px;resize:vertical}
                 <div class="grid">
                    ${logFieldsHtml}
                 </div>
+
+                <!-- 📌 اختيار الرتب المسموح لها برؤية اللوقات -->
+                <div style="margin-top:25px;border-top:1px solid #303344;padding-top:18px;">
+                    <h3>👥 الرتب المسموح لها برؤية اللوقات</h3>
+                    <p class="help">اختر الرتب التي تمتلك صلاحية رؤية رومات اللوقات (اضغط مع الاستمرار على Ctrl أو Shift لتحديد أكثر من رتبة):</p>
+                    <select id="logViewerRoles" name="logViewerRoles" class="form-control" multiple style="height:140px;background:#12141c;color:#fff;border:1px solid #3a3e52;border-radius:9px;width:100%;padding:10px;">
+                    </select>
+                </div>
             </section>
 
             <section class="panel" id="panel">
@@ -1107,6 +1149,21 @@ textarea{min-height:90px;resize:vertical}
             if (key && savedLogChannels[key]) {
                 sel.value = savedLogChannels[key];
             }
+        });
+    }
+
+    function populateLogViewerRolesSelect(selectedRoleIds = []) {
+        const sel = document.getElementById('logViewerRoles');
+        if (!sel) return;
+        sel.innerHTML = '';
+        roles.forEach(role => {
+            const opt = document.createElement('option');
+            opt.value = role.id;
+            opt.textContent = '@' + role.name;
+            if (selectedRoleIds.includes(role.id)) {
+                opt.selected = true;
+            }
+            sel.appendChild(opt);
         });
     }
 
@@ -1419,6 +1476,7 @@ textarea{min-height:90px;resize:vertical}
         });
 
         populateChannelSelects(settings.logChannels || {});
+        populateLogViewerRolesSelect(settings.logViewerRoles || ['1549728006409293854']);
 
         const options = Array.isArray(settings.selectOptions) ? settings.selectOptions : [];
         const defaultLabels = ['استفسار', 'شكوى', 'استلام هدايا', 'شيء اخر ..'];
@@ -1496,6 +1554,9 @@ textarea{min-height:90px;resize:vertical}
         button.disabled = true;
         status.textContent = 'جارٍ الحفظ...';
 
+        const logViewerSelect = document.getElementById('logViewerRoles');
+        const selectedLogViewerRoles = logViewerSelect ? Array.from(logViewerSelect.selectedOptions).map(opt => opt.value) : [];
+
         const payload = {
             botName: getValue('botName').trim(),
             botAvatar: getValue('botAvatar').trim(),
@@ -1506,6 +1567,7 @@ textarea{min-height:90px;resize:vertical}
             ticketCategoryId: getValue('ticketCategoryId').trim(),
             logChannelId: getValue('logChannelId').trim(),
             logChannels: collectLogChannels(),
+            logViewerRoles: selectedLogViewerRoles,
             panelTitle: getValue('panelTitle').trim(),
             panelDescription: getValue('panelDescription').trim(),
             panelImage: getValue('panelImage').trim(),

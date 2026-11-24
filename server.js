@@ -598,7 +598,7 @@ h1{font-size:28px;margin-bottom:8px}
     <div class="profile">
         <img src="${escapeHtml(userAvatar)}" alt="">
         <span>${username}</span>
-        <select id="languageSelect" class="language-select" aria-label="Language"><option value="ar">العربية</option><option value="en">English</option></select>
+        <select id="languageSelect" class="language-select" aria-label="Language" onchange="changeOverviewLanguage(this.value)"><option value="ar">العربية</option><option value="en">English</option></select>
         <a class="logout" id="logoutLink" href="/logout">تسجيل الخروج</a>
     </div>
 </header>
@@ -610,45 +610,67 @@ h1{font-size:28px;margin-bottom:8px}
     </div>
 </main>
 <script>
-(function () {
-    const select = document.getElementById('languageSelect');
-    if (!select) return;
+function changeOverviewLanguage(language) {
     const translations = {
         ar: {
-            brand: 'لوحة التحكم', logout: 'تسجيل الخروج', heading: 'اختر السيرفر',
+            brand: 'لوحة التحكم',
+            logout: 'تسجيل الخروج',
+            heading: 'اختر السيرفر',
             subtitle: 'اختر سيرفرًا لإدارة إعدادات البوت وصلاحيات الأوامر.',
             open: 'فتح لوحة التحكم',
             empty: 'لم يتم العثور على سيرفرات يمكنك إدارتها والبوت موجود فيها.',
             title: 'السيرفرات'
         },
         en: {
-            brand: 'Dashboard', logout: 'Log out', heading: 'Choose a server',
+            brand: 'Dashboard',
+            logout: 'Log out',
+            heading: 'Choose a server',
             subtitle: 'Choose a server to manage the bot settings and command permissions.',
             open: 'Open dashboard',
             empty: 'No servers found where the bot is present and you have server-management permissions.',
             title: 'Servers'
         }
     };
-    function applyLanguage(language) {
-        const lang = translations[language] ? language : 'ar';
-        const t = translations[lang];
-        document.documentElement.lang = lang;
-        document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
-        document.title = t.title + ' - ${escapeHtml(BOT_NAME)}';
-        document.getElementById('overviewBrand').textContent = '${escapeHtml(BOT_NAME)} | ' + t.brand;
-        document.getElementById('logoutLink').textContent = t.logout;
-        document.getElementById('overviewTitle').textContent = t.heading;
-        document.getElementById('overviewSubtitle').textContent = t.subtitle;
-        document.querySelectorAll('.guild-open-label').forEach(el => el.textContent = t.open);
-        const empty = document.getElementById('emptyGuilds');
-        if (empty) empty.textContent = t.empty;
-        select.value = lang;
-        try { localStorage.setItem('dashboard-language', lang); } catch {}
-    }
-    let saved = 'ar';
-    try { saved = localStorage.getItem('dashboard-language') || 'ar'; } catch {}
-    applyLanguage(saved);
-    select.addEventListener('change', () => applyLanguage(select.value));
+
+    const lang = translations[language] ? language : 'ar';
+    const t = translations[lang];
+
+    document.documentElement.lang = lang;
+    document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
+    document.title = t.title + ' - ${escapeHtml(BOT_NAME)}';
+
+    const setText = (id, value) => {
+        const element = document.getElementById(id);
+        if (element) element.textContent = value;
+    };
+
+    setText('overviewBrand', '${escapeHtml(BOT_NAME)} | ' + t.brand);
+    setText('logoutLink', t.logout);
+    setText('overviewTitle', t.heading);
+    setText('overviewSubtitle', t.subtitle);
+
+    document.querySelectorAll('.guild-open-label').forEach(element => {
+        element.textContent = t.open;
+    });
+
+    setText('emptyGuilds', t.empty);
+
+    const selector = document.getElementById('languageSelect');
+    if (selector) selector.value = lang;
+
+    try {
+        localStorage.setItem('dashboard-language', lang);
+    } catch (error) {}
+}
+
+(function () {
+    let savedLanguage = 'ar';
+
+    try {
+        savedLanguage = localStorage.getItem('dashboard-language') || 'ar';
+    } catch (error) {}
+
+    changeOverviewLanguage(savedLanguage);
 })();
 </script>
 </body>

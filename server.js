@@ -298,9 +298,13 @@ function requireLogin(req, res, next) {
 }
 
 async function getFreshUserGuilds(req, forceRefresh = false) {
-    if (!forceRefresh && req.session.guilds && Array.isArray(req.session.guilds) && req.session.guilds.length > 0) {
-        return req.session.guilds;
-    }
+    const cacheAge = 10 * 60 * 1000;
+    const cacheIsFresh =
+        Array.isArray(req.session.guilds) &&
+        req.session.guildsFetchedAt &&
+        Date.now() - req.session.guildsFetchedAt < cacheAge;
+
+    if (!forceRefresh && cacheIsFresh) return req.session.guilds;
 
     let accessToken = req.session.accessToken;
 
@@ -310,44 +314,47 @@ async function getFreshUserGuilds(req, forceRefresh = false) {
             timeout: 10000
         });
 
-        const checks = await Promise.all(
-            response.data.map(async guild => {
+        const manageableGuilds = response.data.filter(guild => {
+            const permissions = BigInt(guild.permissions || '0');
+            return (permissions & 8n) === 8n || (permissions & 32n) === 32n;
+        });
+
+        const botGuilds = [];
+        let nextIndex = 0;
+        const workerCount = Math.min(4, manageableGuilds.length);
+
+        async function worker() {
+            while (nextIndex < manageableGuilds.length) {
+                const index = nextIndex++;
+                const guild = manageableGuilds[index];
+
                 try {
                     await axios.get(`${API}/guilds/${guild.id}`, {
                         headers: { Authorization: `Bot ${BOT_TOKEN}` },
                         timeout: 7000
                     });
-
-                    const permissions = BigInt(guild.permissions || '0');
-                    const hasPerms = (permissions & 8n) === 8n || (permissions & 32n) === 32n;
-                    if (hasPerms) return guild;
-
-                    const memberRes = await axios.get(`${API}/guilds/${guild.id}/members/${req.session.user.id}`, {
-                        headers: { Authorization: `Bot ${BOT_TOKEN}` },
-                        timeout: 7000
-                    });
-                    const memberRoles = memberRes.data.roles || [];
-                    if (memberRoles.includes(DASHBOARD_ADMIN_ROLE)) {
-                        return guild;
-                    }
+                    botGuilds.push(guild);
                 } catch (error) {
-                    return null;
+                    if (error.response?.status !== 404 && error.response?.status !== 403) {
+                        console.warn(`Could not verify bot membership for guild ${guild.id}:`, error.response?.status || error.message);
+                    }
                 }
-                return null;
-            })
-        );
+            }
+        }
 
-        return checks.filter(Boolean);
+        await Promise.all(Array.from({ length: workerCount }, () => worker()));
+        return botGuilds;
     }
 
     if (accessToken) {
         try {
             const guilds = await fetchGuilds(accessToken);
             req.session.guilds = guilds;
+            req.session.guildsFetchedAt = Date.now();
             return guilds;
         } catch (error) {
             if (error.response?.status !== 401) {
-                if (req.session.guilds) return req.session.guilds;
+                if (Array.isArray(req.session.guilds)) return req.session.guilds;
                 throw error;
             }
         }
@@ -377,6 +384,7 @@ async function getFreshUserGuilds(req, forceRefresh = false) {
 
             const guilds = await fetchGuilds(accessToken);
             req.session.guilds = guilds;
+            req.session.guildsFetchedAt = Date.now();
             return guilds;
         } catch (error) {
             req.session.accessToken = null;
@@ -388,6 +396,11 @@ async function getFreshUserGuilds(req, forceRefresh = false) {
     throw new Error('Discord login required');
 }
 
+async function isAuthorizedGuild(req, guildId) {
+    if (!req.session?.user || !validSnowflake(String(guildId))) return false;
+    const guilds = await getFreshUserGuilds(req);
+    return guilds.some(guild => String(guild.id) === String(guildId));
+}
 async function isAuthorizedGuild(req, guildId) {
     if (!req.session?.user || !validSnowflake(String(guildId))) {
         return false;
@@ -546,7 +559,7 @@ ${loginError}
 
 app.get('/dashboard', requireLogin, async (req, res) => {
     try {
-        const guilds = await getFreshUserGuilds(req, true);
+        const guilds = await getFreshUserGuilds(req);
         const user = req.session.user;
         const username = escapeHtml(user.global_name || user.username);
         const userAvatar = user.avatar
@@ -563,7 +576,7 @@ app.get('/dashboard', requireLogin, async (req, res) => {
     <img src="${escapeHtml(icon)}" alt="">
     <div class="guild-info">
         <strong>${escapeHtml(guild.name || 'سيرفر بدون اسم')}</strong>
-        <span>فتح لوحة التحكم</span>
+        <span class="guild-open-label">فتح لوحة التحكم</span>
     </div>
     <span class="arrow">←</span>
 </a>`;
@@ -586,6 +599,7 @@ header{max-width:1000px;margin:0 auto 28px;display:flex;align-items:center;justi
 .profile img{width:38px;height:38px;border-radius:50%}
 a{color:inherit;text-decoration:none}
 .logout{padding:10px 14px;background:#292c3a;border-radius:10px;font-size:14px}
+.language-select{padding:9px 10px;border:1px solid #3a3e52;border-radius:9px;background:#12141c;color:#fff;font:inherit;font-size:13px;cursor:pointer}
 main{max-width:1000px;margin:auto}
 h1{font-size:28px;margin-bottom:8px}
 .subtitle{color:#a6aabd;line-height:1.7;margin-bottom:24px}
@@ -603,20 +617,63 @@ h1{font-size:28px;margin-bottom:8px}
 </head>
 <body>
 <header>
-    <div class="brand">${escapeHtml(BOT_NAME)} | لوحة التحكم</div>
+    <div class="brand" id="overviewBrand">${escapeHtml(BOT_NAME)} | لوحة التحكم</div>
     <div class="profile">
         <img src="${escapeHtml(userAvatar)}" alt="">
         <span>${username}</span>
-        <a class="logout" href="/logout">تسجيل الخروج</a>
+        <select id="languageSelect" class="language-select" aria-label="Language"><option value="ar">العربية</option><option value="en">English</option></select>
+        <a class="logout" id="logoutLink" href="/logout">تسجيل الخروج</a>
     </div>
 </header>
 <main>
-    <h1>اختر السيرفر</h1>
-    <div class="subtitle">اختر سيرفرًا لإدارة إعدادات البوت وصلاحيات الأوامر.</div>
+    <h1 id="overviewTitle">اختر السيرفر</h1>
+    <div class="subtitle" id="overviewSubtitle">اختر سيرفرًا لإدارة إعدادات البوت وصلاحيات الأوامر.</div>
     <div class="guilds">
-        ${guildCards || '<div class="empty">لم يتم العثور على سيرفرات يمكنك إدارتها والبوت موجود فيها.</div>'}
+        ${guildCards || '<div class="empty" id="emptyGuilds">لم يتم العثور على سيرفرات يمكنك إدارتها والبوت موجود فيها.</div>'}
     </div>
 </main>
+<script>
+(function () {
+    const select = document.getElementById('languageSelect');
+    if (!select) return;
+    const translations = {
+        ar: {
+            brand: 'لوحة التحكم', logout: 'تسجيل الخروج', heading: 'اختر السيرفر',
+            subtitle: 'اختر سيرفرًا لإدارة إعدادات البوت وصلاحيات الأوامر.',
+            open: 'فتح لوحة التحكم',
+            empty: 'لم يتم العثور على سيرفرات يمكنك إدارتها والبوت موجود فيها.',
+            title: 'السيرفرات'
+        },
+        en: {
+            brand: 'Dashboard', logout: 'Log out', heading: 'Choose a server',
+            subtitle: 'Choose a server to manage the bot settings and command permissions.',
+            open: 'Open dashboard',
+            empty: 'No servers found where the bot is present and you have server-management permissions.',
+            title: 'Servers'
+        }
+    };
+    function applyLanguage(language) {
+        const lang = translations[language] ? language : 'ar';
+        const t = translations[lang];
+        document.documentElement.lang = lang;
+        document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
+        document.title = t.title + ' - ${escapeHtml(BOT_NAME)}';
+        document.getElementById('overviewBrand').textContent = '${escapeHtml(BOT_NAME)} | ' + t.brand;
+        document.getElementById('logoutLink').textContent = t.logout;
+        document.getElementById('overviewTitle').textContent = t.heading;
+        document.getElementById('overviewSubtitle').textContent = t.subtitle;
+        document.querySelectorAll('.guild-open-label').forEach(el => el.textContent = t.open);
+        const empty = document.getElementById('emptyGuilds');
+        if (empty) empty.textContent = t.empty;
+        select.value = lang;
+        try { localStorage.setItem('dashboard-language', lang); } catch {}
+    }
+    let saved = 'ar';
+    try { saved = localStorage.getItem('dashboard-language') || 'ar'; } catch {}
+    applyLanguage(saved);
+    select.addEventListener('change', () => applyLanguage(select.value));
+})();
+</script>
 </body>
 </html>`);
     } catch (error) {

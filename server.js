@@ -598,7 +598,6 @@ h1{font-size:28px;margin-bottom:8px}
     <div class="profile">
         <img src="${escapeHtml(userAvatar)}" alt="">
         <span>${username}</span>
-        <select id="languageSelect" class="language-select" aria-label="Language" onchange="changeOverviewLanguage(this.value)"><option value="ar">العربية</option><option value="en">English</option></select>
         <a class="logout" id="logoutLink" href="/logout">تسجيل الخروج</a>
     </div>
 </header>
@@ -609,70 +608,7 @@ h1{font-size:28px;margin-bottom:8px}
         ${guildCards || '<div class="empty" id="emptyGuilds">لم يتم العثور على سيرفرات يمكنك إدارتها والبوت موجود فيها.</div>'}
     </div>
 </main>
-<script>
-function changeOverviewLanguage(language) {
-    const translations = {
-        ar: {
-            brand: 'لوحة التحكم',
-            logout: 'تسجيل الخروج',
-            heading: 'اختر السيرفر',
-            subtitle: 'اختر سيرفرًا لإدارة إعدادات البوت وصلاحيات الأوامر.',
-            open: 'فتح لوحة التحكم',
-            empty: 'لم يتم العثور على سيرفرات يمكنك إدارتها والبوت موجود فيها.',
-            title: 'السيرفرات'
-        },
-        en: {
-            brand: 'Dashboard',
-            logout: 'Log out',
-            heading: 'Choose a server',
-            subtitle: 'Choose a server to manage the bot settings and command permissions.',
-            open: 'Open dashboard',
-            empty: 'No servers found where the bot is present and you have server-management permissions.',
-            title: 'Servers'
-        }
-    };
 
-    const lang = translations[language] ? language : 'ar';
-    const t = translations[lang];
-
-    document.documentElement.lang = lang;
-    document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
-    document.title = t.title + ' - ${escapeHtml(BOT_NAME)}';
-
-    const setText = (id, value) => {
-        const element = document.getElementById(id);
-        if (element) element.textContent = value;
-    };
-
-    setText('overviewBrand', '${escapeHtml(BOT_NAME)} | ' + t.brand);
-    setText('logoutLink', t.logout);
-    setText('overviewTitle', t.heading);
-    setText('overviewSubtitle', t.subtitle);
-
-    document.querySelectorAll('.guild-open-label').forEach(element => {
-        element.textContent = t.open;
-    });
-
-    setText('emptyGuilds', t.empty);
-
-    const selector = document.getElementById('languageSelect');
-    if (selector) selector.value = lang;
-
-    try {
-        localStorage.setItem('dashboard-language', lang);
-    } catch (error) {}
-}
-
-(function () {
-    let savedLanguage = 'ar';
-
-    try {
-        savedLanguage = localStorage.getItem('dashboard-language') || 'ar';
-    } catch (error) {}
-
-    changeOverviewLanguage(savedLanguage);
-})();
-</script>
 </body>
 </html>`);
     } catch (error) {
@@ -964,7 +900,21 @@ textarea{min-height:90px;resize:vertical}
 .command strong{display:block;margin-bottom:10px;font-size:14px}
 .role-list{display:flex;flex-wrap:wrap;gap:8px}
 .role-choice{display:flex;align-items:center;gap:7px;background:#12141c;border:1px solid #3a3e52;padding:8px 10px;border-radius:8px;font-size:12px;max-width:100%}
-.role-choice input{width:auto;margin:0}
+.role-choice input{appearance:none;-webkit-appearance:none;width:44px;height:24px;min-width:44px;margin:0;position:relative;display:inline-block;vertical-align:middle;border:0;border-radius:999px;background:#f4f4f5;cursor:pointer;transition:background .2s ease}
+.role-choice input::before{content:"";position:absolute;width:18px;height:18px;top:3px;left:3px;border-radius:50%;background:#85858d;transition:transform .2s ease,background .2s ease}
+.role-choice input:checked{background:#22c55e}
+.role-choice input:checked::before{transform:translateX(20px);background:#fff}
+.role-choice input:focus-visible{outline:2px solid #8bffad;outline-offset:3px}
+.language-setting{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px;background:#12141c;border:1px solid #3a3e52;border-radius:12px}
+.language-setting-copy strong{display:block;margin-bottom:6px}
+.language-setting-copy span{font-size:12px;color:#a6aabd;line-height:1.6}
+.language-toggle{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.language-toggle input{appearance:none;-webkit-appearance:none;width:48px;height:27px;padding:0;margin:0;position:relative;border:0;border-radius:999px;background:#f4f4f5;cursor:pointer;transition:background .2s ease}
+.language-toggle input::before{content:"";position:absolute;width:21px;height:21px;top:3px;left:3px;border-radius:50%;background:#85858d;transition:transform .2s ease,background .2s ease}
+.language-toggle input:checked{background:#22c55e}
+.language-toggle input:checked::before{transform:translateX(21px);background:#fff}
+.language-toggle input:focus-visible{outline:2px solid #8bffad;outline-offset:3px}
+
 .role-choice span{overflow-wrap:anywhere}
 .option{padding:14px;border:1px solid #35394b;border-radius:11px;margin-bottom:12px}
 .empty{color:#a6aabd;font-size:13px;line-height:1.8}
@@ -993,6 +943,7 @@ textarea{min-height:90px;resize:vertical}
     <div class="layout">
         <nav id="tabs">
             <button class="active" data-tab="general">إعدادات البوت</button>
+            <button data-tab="preferences">التفضيلات</button>
             <button data-tab="channels">القنوات والرتب</button>
             <button data-tab="logs">نظام اللوقات الشامل (21 قسم)</button>
             <button data-tab="panel">لوحة التذاكر</button>
@@ -1033,6 +984,24 @@ textarea{min-height:90px;resize:vertical}
                 </div>
 
                 <div class="field"><label for="activityText">نص النشاط</label><input id="activityText" maxlength="128" placeholder="مثال: الدعم الفني"></div>
+            </section>
+
+            <section class="panel" id="preferences">
+                <h2>التفضيلات</h2>
+                <div class="field">
+                    <label>لغة لوحة التحكم</label>
+                    <div class="language-setting">
+                        <div class="language-setting-copy">
+                            <strong>العربية / English</strong>
+                            <span>استخدم المفتاح للتبديل بين اللغة العربية والإنجليزية.</span>
+                        </div>
+                        <div class="language-toggle">
+                            <label for="dashboardLanguage">عربي</label>
+                            <input type="checkbox" id="dashboardLanguage" role="switch" aria-label="Switch dashboard language">
+                            <label for="dashboardLanguage">EN</label>
+                        </div>
+                    </div>
+                </div>
             </section>
 
             <section class="panel" id="channels">
@@ -1155,6 +1124,28 @@ textarea{min-height:90px;resize:vertical}
     let autoRepliesData = [];
     let rolePointsData = [];
     let rankPromotionsData = [];
+
+    const languageSwitch = document.getElementById('dashboardLanguage');
+
+    function applySettingsLanguage(isEnglish) {
+        const lang = isEnglish ? 'en' : 'ar';
+        document.documentElement.lang = lang;
+        document.documentElement.dir = isEnglish ? 'ltr' : 'rtl';
+        try {
+            localStorage.setItem('dashboard-language', lang);
+        } catch (error) {}
+    }
+
+    try {
+        languageSwitch.checked = localStorage.getItem('dashboard-language') === 'en';
+    } catch (error) {
+        languageSwitch.checked = false;
+    }
+
+    applySettingsLanguage(languageSwitch.checked);
+    languageSwitch.addEventListener('change', function () {
+        applySettingsLanguage(this.checked);
+    });
 
     document.querySelectorAll('#tabs button').forEach(function (button) {
         button.addEventListener('click', function () {

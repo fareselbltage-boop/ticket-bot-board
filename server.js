@@ -401,29 +401,6 @@ async function isAuthorizedGuild(req, guildId) {
     const guilds = await getFreshUserGuilds(req);
     return guilds.some(guild => String(guild.id) === String(guildId));
 }
-async function isAuthorizedGuild(req, guildId) {
-    if (!req.session?.user || !validSnowflake(String(guildId))) {
-        return false;
-    }
-
-    const guilds = await getFreshUserGuilds(req);
-    if (guilds.some(guild => String(guild.id) === String(guildId))) {
-        return true;
-    }
-
-    try {
-        const memberRes = await axios.get(`${API}/guilds/${guildId}/members/${req.session.user.id}`, {
-            headers: { Authorization: `Bot ${BOT_TOKEN}` },
-            timeout: 7000
-        });
-        const memberRoles = memberRes.data.roles || [];
-        if (memberRoles.includes(DASHBOARD_ADMIN_ROLE)) {
-            return true;
-        }
-    } catch (error) {}
-
-    return false;
-}
 
 app.get('/login', (req, res) => {
     const clientId = process.env.CLIENT_ID;
